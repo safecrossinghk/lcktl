@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title">
+  <title id="title">安全過路 HK icon</title>
+  <rect width="512" height="512" rx="112" fill="#0f766e" />
+  <circle cx="256" cy="142" r="58" fill="#f8fafc" />
+  <path d="M238 218h52l78 186h-58l-22-56h-72l-22 56h-58l78-186h24Zm-4 84h36l-18-48-18 48Z" fill="#f8fafc" />
+  <path d="M112 420h288" stroke="#f97316" stroke-width="28" stroke-linecap="round" />
+</svg>
