@@ -1,0 +1,19 @@
+{
+  "name": "安全過路 HK - LSK001 測試",
+  "short_name": "安全過路",
+  "description": "香港荔枝角道東行 × 長荔街行人過路燈週期記錄 PWA 測試版。",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#ecfeff",
+  "theme_color": "#0f766e",
+  "icons": [
+    {
+      "src": "./icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
