@@ -1,0 +1,133 @@
+:root {
+  color-scheme: light;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans HK", "PingFang HK", sans-serif;
+  background: #ecfeff;
+  color: #0f172a;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at top left, rgba(20, 184, 166, 0.28), transparent 32rem),
+    linear-gradient(160deg, #ecfeff 0%, #f8fafc 55%, #dbeafe 100%);
+}
+
+.app-shell {
+  width: min(100%, 44rem);
+  min-height: 100vh;
+  margin: 0 auto;
+  padding: max(1rem, env(safe-area-inset-top)) 1rem max(1rem, env(safe-area-inset-bottom));
+  display: grid;
+  gap: 1rem;
+  align-content: center;
+}
+
+.hero { padding: 1rem 0.25rem; }
+
+.eyebrow,
+.label,
+.note,
+.muted,
+.road-id { margin: 0; }
+
+.eyebrow,
+.label {
+  color: #0f766e;
+  font-size: 0.85rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+h1,
+h2 {
+  margin: 0.35rem 0;
+  line-height: 1.1;
+}
+
+h1 { font-size: clamp(2.6rem, 14vw, 5rem); }
+
+h2 { font-size: clamp(1.35rem, 5vw, 2rem); }
+
+.hero__summary,
+.muted,
+.note,
+.road-id {
+  color: #475569;
+  font-size: 1rem;
+  line-height: 1.6;
+}
+
+.card {
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid rgba(15, 118, 110, 0.16);
+  border-radius: 1.5rem;
+  box-shadow: 0 1.25rem 3rem rgba(15, 23, 42, 0.12);
+  padding: 1.25rem;
+}
+
+.junction-card {
+  display: flex;
+  gap: 1rem;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.status-pill {
+  flex: 0 0 auto;
+  border-radius: 999px;
+  background: #ccfbf1;
+  color: #115e59;
+  font-size: 0.85rem;
+  font-weight: 700;
+  padding: 0.45rem 0.75rem;
+}
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.stats-grid strong {
+  display: block;
+  margin-top: 0.25rem;
+  font-size: 1.35rem;
+}
+
+.action-card {
+  display: grid;
+  gap: 1rem;
+}
+
+[data-location-status][data-state="ready"] { color: #047857; }
+[data-location-status][data-state="waiting"] { color: #b45309; }
+
+.signal-button {
+  width: 100%;
+  min-height: 8rem;
+  border: 0;
+  border-radius: 1.4rem;
+  background: linear-gradient(180deg, #f97316 0%, #dc2626 100%);
+  color: #fff;
+  font-size: clamp(2rem, 10vw, 4rem);
+  font-weight: 900;
+  letter-spacing: 0.05em;
+  box-shadow: 0 1rem 2rem rgba(220, 38, 38, 0.32);
+}
+
+.signal-button:disabled {
+  cursor: not-allowed;
+  filter: grayscale(0.35);
+  opacity: 0.72;
+}
+
+@media (max-width: 28rem) {
+  .junction-card,
+  .stats-grid { grid-template-columns: 1fr; }
+
+  .junction-card { display: grid; }
+}
