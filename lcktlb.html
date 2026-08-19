@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="zh-Hant-HK">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#0f766e" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="安全過路 HK" />
+    <title>安全過路 HK｜LSK001 測試</title>
+    <link rel="manifest" href="./manifest.json" />
+    <link rel="icon" href="./icon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="./icon.svg" />
+    <link rel="stylesheet" href="./styles.css" />
+    <script type="module" src="./main.js"></script>
+  </head>
+  <body>
+    <main class="app-shell" data-app>
+      <section class="hero" aria-labelledby="app-title">
+        <p class="eyebrow">LSK001 PWA 測試版</p>
+        <h1 id="app-title">安全過路 HK</h1>
+        <p class="hero__summary">第一步只建立 PWA 基本架構及首頁 UI，暫不加入 GPS、AI、Cloudflare Worker、D1、相機或 OCR。</p>
+      </section>
+
+      <section class="card junction-card" aria-labelledby="junction-title">
+        <div>
+          <p class="label">測試路口</p>
+          <h2 id="junction-title">荔枝角道東行 × 長荔街</h2>
+          <p class="road-id">ROAD_ID：<strong>LSK001</strong></p>
+        </div>
+        <span class="status-pill">PWA</span>
+      </section>
+
+      <section class="card action-card" aria-labelledby="action-title">
+        <p class="label">位置狀態</p>
+        <h2 id="action-title">等待下一步加入 30 米範圍判斷</h2>
+        <p class="muted">進入路口 30 米範圍後，下一步才會啟用以下大型按鈕。</p>
+        <button class="signal-button" type="button" disabled>剛剛轉燈</button>
+        <p class="note">本次只修正 GitHub Pages 的相對檔案路徑及 PWA 載入問題。</p>
+      </section>
+    </main>
+  </body>
+</html>
