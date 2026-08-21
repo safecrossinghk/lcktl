@@ -1,0 +1,585 @@
+<!DOCTYPE html>
+<html lang="zh-HK">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>陰影戰術導航 (HK Ultra Version)</title>
+<style>
+:root {
+--primary: #10B981;
+--bg-glass: rgba(255, 255, 255, 0.90);
+--text-main: #1F2937;
+--text-sub: #6B7280;
+}
+
+body {
+margin: 0;
+padding: 0;
+overflow: hidden;
+font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+background-color: #eaeaea;
+color: var(--text-main);
+}
+
+#webgl-container, #css-container {
+position: absolute;
+top: 0;
+left: 0;
+width: 100vw;
+height: 100vh;
+}
+#css-container { pointer-events: none; }
+
+/* 韓系極簡 Floating Panel */
+.app-card {
+position: absolute;
+top: 16px;
+left: 16px;
+z-index: 100;
+background: var(--bg-glass);
+backdrop-filter: blur(12px);
+border-radius: 20px;
+box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
+width: 320px;
+padding: 16px;
+box-sizing: border-box;
+}
+
+/* Tab 切換頁籤 */
+.tab-group {
+display: flex;
+background: #E5E7EB;
+padding: 3px;
+border-radius: 12px;
+margin-bottom: 12px;
+}
+.tab-btn {
+flex: 1;
+border: none;
+background: transparent;
+padding: 6px 0;
+font-size: 12px;
+font-weight: 600;
+color: var(--text-sub);
+border-radius: 9px;
+cursor: pointer;
+transition: all 0.2s;
+}
+.tab-btn.active {
+background: #FFFFFF;
+color: var(--text-main);
+box-shadow: 0 2px 6px rgba(0, 0, 0, 0.06);
+}
+
+.tab-content { display: none; }
+.tab-content.active { display: block; }
+
+/* UI 元件樣式 */
+.time-val { font-size: 28px; font-weight: 800; color: var(--primary); }
+.badge { background: #E5E7EB; font-size: 11px; padding: 2px 8px; border-radius: 10px; font-weight: 600; }
+.badge-green { background: #D1FAE5; color: #065F46; }
+.badge-orange { background: #FFEDD5; color: #9A3412; }
+
+input[type=range] { width: 100%; accent-color: var(--primary); }
+
+.route-card {
+border: 1px solid #E5E7EB;
+border-radius: 12px;
+padding: 10px;
+margin-top: 8px;
+background: #FFF;
+cursor: pointer;
+}
+.route-card.selected { border: 2px solid var(--primary); }
+
+.row-flex { display: flex; justify-content: space-between; align-items: center; margin-top: 6px; }
+.label-sm { font-size: 12px; color: var(--text-sub); }
+
+/* 平貼地面 HTML 標籤 */
+.ground-label {
+color: #374151;
+font-size: 12px;
+font-weight: 700;
+white-space: nowrap;
+user-select: none;
+background: rgba(255, 255, 255, 0.75);
+padding: 2px 7px;
+border-radius: 4px;
+border: 1px solid rgba(209, 213, 219, 0.8);
+}
+.ground-label.bridge {
+background: rgba(16, 185, 129, 0.15);
+color: #065F46;
+border-color: #10B981;
+}
+@media (max-width: 600px) {
+.app-card {
+left: 50%;
+top: 10px;
+transform: translateX(-50%);
+width: calc(100vw - 24px);
+max-width: 92%;
+padding: 10px 12px;
+border-radius: 16px;
+}
+.tab-group { margin-bottom: 8px; }
+.tab-btn { font-size: 11px; padding: 5px 0; }
+.time-val { font-size: 22px; }
+.label-sm { font-size: 11px; }
+.badge { font-size: 10px; padding: 2px 6px; }
+.route-card { padding: 8px; margin-top: 6px; }
+.route-card b { font-size: 12px !important; }
+input[type=range] { height: 18px; }
+#seat-side-txt { font-size: 13px !important; }
+#seat-deck-txt { font-size: 12px !important; }
+}
+</style>
+
+<!-- CDNs -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/renderers/CSS3DRenderer.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/suncalc/1.8.0/suncalc.min.js"></script>
+</head>
+<body>
+
+<div id="webgl-container"></div>
+<div id="css-container"></div>
+
+<!-- UI 控制主面板 -->
+<div class="app-card">
+<div class="tab-group">
+<button class="tab-btn active" onclick="switchTab('tab-sun')">☀️ 太陽天色</button>
+<button class="tab-btn" onclick="switchTab('tab-route')">🚶 避曬導航</button>
+<button class="tab-btn" onclick="switchTab('tab-bus')">🚌 巴士避曬</button>
+</div>
+
+<!-- Tab 1: 太陽與天色控制 -->
+<div id="tab-sun" class="tab-content active">
+<div class="row-flex">
+<span class="label-sm">荔枝角實時模擬</span>
+<span class="badge" id="weather-badge">晴朗無雲</span>
+</div>
+<div class="time-val" id="time-text">14:00</div>
+<div class="label-sm" id="model-status" style="margin-bottom:6px;">🏙️ 3D 地圖：正在加載 1:1 荔枝角街景...</div>
+<input type="range" id="time-slider" min="6" max="19" step="0.1" value="14">
+
+<div class="row-flex" style="margin-top:12px;">
+<span class="label-sm">天色修正 (雲層漫射):</span>
+<button class="badge" id="cloud-toggle-btn" onclick="toggleCloudMode()">切換為多雲/陰天</button>
+</div>
+<div class="row-flex" style="margin-top:8px;">
+<span class="label-sm">太陽仰角: <b id="alt-txt">0°</b></span>
+<span class="label-sm">方位角: <b id="azi-txt">0°</b></span>
+</div>
+</div>
+
+<!-- Tab 2: 避曬路綫導航 -->
+<div id="tab-route" class="tab-content">
+<div class="label-sm">起點：荔枝角站 B1 出口 $\rightarrow$ 終點：D2 Place 二期</div>
+
+<div class="route-card selected" onclick="selectRoute('shade')">
+<div class="row-flex">
+<b style="font-size:14px;">陰影/天橋優先路綫</b>
+<span class="badge badge-green">最涼快</span>
+</div>
+<div class="row-flex label-sm" style="margin-top:4px;">
+<span>步行 6 分鐘 (420m)</span>
+<span style="color:#10B981; font-weight:700;">曝曬時間: 0.5 分鐘</span>
+</div>
+<div class="label-sm" style="color:#6B7280; font-size:11px; margin-top:2px;">途經：長沙灣道行人天橋 + 騎樓底</div>
+</div>
+
+<div class="route-card" onclick="selectRoute('direct')">
+<div class="row-flex">
+<b style="font-size:14px;">最短直線路綫</b>
+<span class="badge badge-orange">直射曝曬</span>
+</div>
+<div class="row-flex label-sm" style="margin-top:4px;">
+<span>步行 4.5 分鐘 (310m)</span>
+<span style="color:#EF4444; font-weight:700;">曝曬時間: 3.8 分鐘</span>
+</div>
+<div class="label-sm" style="color:#6B7280; font-size:11px; margin-top:2px;">體感出汗指數：高 (無遮擋大馬路)</div>
+</div>
+</div>
+
+<!-- Tab 3: 巴士避曬指南 -->
+<div id="tab-bus" class="tab-content">
+<div class="label-sm">選擇行車方向 (長沙灣道):</div>
+<select id="bus-dir-select" onchange="calcBusSeating()" style="width:100%; margin:6px 0; padding:6px; border-radius:8px;">
+<option value="90">東行 (往旺角/尖沙咀方向)</option>
+<option value="270" selected>西行 (往美孚/葵芳方向)</option>
+</select>
+
+<div style="background:#F3F4F6; padding:10px; border-radius:10px; margin-top:8px;">
+<div class="row-flex">
+<span class="label-sm">建議坐座位邊側:</span>
+<b id="seat-side-txt" style="color:#10B981; font-size:16px;">計算中...</b>
+</div>
+<div class="row-flex" style="margin-top:6px;">
+<span class="label-sm">雙層車廂層數建議:</span>
+<b id="seat-deck-txt" style="font-size:13px;">下層 (避開車頂輻射熱)</b>
+</div>
+</div>
+</div>
+</div>
+
+<script>
+// --- 1. Scene & Renderer Setup ---
+const webglContainer = document.getElementById('webgl-container');
+const cssContainer = document.getElementById('css-container');
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 0.75; // 韓系低曝光度
+webglContainer.appendChild(renderer.domElement);
+
+const cssRenderer = new THREE.CSS3DRenderer();
+cssRenderer.setSize(window.innerWidth, window.innerHeight);
+cssContainer.appendChild(cssRenderer.domElement);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color('#EAEAEA');
+const cssScene = new THREE.Scene();
+
+const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 3000);
+camera.position.set(50, 120, 170);
+
+const controls = new THREE.OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.target.set(0, 8, 0);
+controls.maxPolarAngle = Math.PI / 2.15;
+
+// --- 2. Lighting & Sunlight ---
+const ambientLight = new THREE.AmbientLight(0xffffff, 0.65);
+scene.add(ambientLight);
+
+const sunLight = new THREE.DirectionalLight(0xfffaed, 0.85);
+sunLight.castShadow = true;
+sunLight.shadow.mapSize.width = 2048;
+sunLight.shadow.mapSize.height = 2048;
+sunLight.shadow.bias = -0.0003;
+const d = 500;
+sunLight.shadow.camera.left = -d; sunLight.shadow.camera.right = d;
+sunLight.shadow.camera.top = d; sunLight.shadow.camera.bottom = -d;
+sunLight.shadow.camera.near = 1;
+sunLight.shadow.camera.far = 1200;
+scene.add(sunLight);
+
+// --- 3. Materials ---
+const matGround = new THREE.MeshStandardMaterial({ color: 0xE5E7EB, roughness: 0.95 });
+const matBuilding = new THREE.MeshStandardMaterial({ color: 0xF3F4F6, roughness: 0.85 });
+const matBridge = new THREE.MeshStandardMaterial({ color: 0xD1D5DB, roughness: 0.5 }); // 天橋金屬灰
+
+// --- 4. Building 3D Map (荔枝角 1:1 戰區街景 + Grid Helper) ---
+const ORIGIN_LAT = 22.3372;
+const ORIGIN_LNG = 114.1480;
+const MAP_SCALE = 100000;
+const mapGroup = new THREE.Group();
+scene.add(mapGroup);
+
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(3000, 3000), matGround);
+ground.rotation.x = -Math.PI / 2;
+ground.position.y = -0.5;
+ground.receiveShadow = true;
+scene.add(ground);
+
+const gridHelper = new THREE.GridHelper(3000, 80, 0x64748B, 0xCBD5E1);
+gridHelper.position.y = 0.02;
+scene.add(gridHelper);
+
+function latLngTo3D(lat, lng) {
+const x = (lng - ORIGIN_LNG) * MAP_SCALE;
+const z = (ORIGIN_LAT - lat) * MAP_SCALE;
+return { x, z };
+}
+
+function enableAccurateShadows(object) {
+object.traverse((child) => {
+if (child.isMesh) {
+child.castShadow = true;
+child.receiveShadow = true;
+}
+});
+}
+
+function createBuildingMesh(geometry, x, z, h, material = matBuilding) {
+const mesh = new THREE.Mesh(geometry, material);
+mesh.position.set(x, h / 2, z);
+mesh.castShadow = true;
+mesh.receiveShadow = true;
+mapGroup.add(mesh);
+return mesh;
+}
+
+function createBoxBuilding(x, z, w, depth, h, material = matBuilding) {
+return createBuildingMesh(new THREE.BoxGeometry(w, h, depth), x, z, h, material);
+}
+
+function createPolygonBuilding(x, z, radius, sides, h, rotation = 0, material = matBuilding) {
+const shape = new THREE.Shape();
+for (let i = 0; i < sides; i++) {
+const a = rotation + (i / sides) * Math.PI * 2;
+const px = Math.cos(a) * radius;
+const py = Math.sin(a) * radius;
+if (i === 0) shape.moveTo(px, py); else shape.lineTo(px, py);
+}
+shape.closePath();
+const geometry = new THREE.ExtrudeGeometry(shape, { depth: h, bevelEnabled: false });
+geometry.rotateX(Math.PI / 2);
+return createBuildingMesh(geometry, x, z, h, material);
+}
+
+function createStarBuilding(x, z, outerRadius, innerRadius, points, h, material = matBuilding) {
+const shape = new THREE.Shape();
+for (let i = 0; i < points * 2; i++) {
+const r = i % 2 === 0 ? outerRadius : innerRadius;
+const a = -Math.PI / 2 + (i / (points * 2)) * Math.PI * 2;
+const px = Math.cos(a) * r;
+const py = Math.sin(a) * r;
+if (i === 0) shape.moveTo(px, py); else shape.lineTo(px, py);
+}
+shape.closePath();
+const geometry = new THREE.ExtrudeGeometry(shape, { depth: h, bevelEnabled: false });
+geometry.rotateX(Math.PI / 2);
+return createBuildingMesh(geometry, x, z, h, material);
+}
+
+function buildFallbackLaiChiKokDistrict() {
+const towers = [
+[-72,-56,28,42,86],[-34,-58,24,36,72],[18,-62,34,40,104],[62,-52,30,44,92],
+[-92,12,26,34,68],[-48,18,38,30,118],[4,24,32,46,96],[48,20,36,38,132],[92,28,30,34,76],
+[-112,86,24,38,58],[-68,92,30,46,84],[-20,96,28,34,66],[30,86,42,32,88],[78,92,34,40,108]
+];
+towers.forEach(([x,z,w,dep,h]) => createBoxBuilding(x, z, w, dep, h));
+createStarBuilding(0, -8, 28, 13, 8, 126);
+createPolygonBuilding(-122, -36, 24, 6, 74, Math.PI / 6);
+createPolygonBuilding(112, -18, 30, 7, 98, Math.PI / 7);
+for (let i = -6; i <= 6; i++) {
+createBoxBuilding(i * 28, 142, 14, 26, 30 + (Math.abs(i) % 3) * 12);
+}
+const statusEl = document.getElementById('model-status');
+statusEl.textContent = '🏙️ 3D 地圖：已使用內建精細荔枝角戰區街景（離線模型）';
+}
+
+function loadRealHongKongModel() {
+const statusEl = document.getElementById('model-status');
+const loader = new THREE.GLTFLoader();
+loader.load('hongkong.glb', (gltf) => {
+const model = gltf.scene;
+const box = new THREE.Box3().setFromObject(model);
+const center = box.getCenter(new THREE.Vector3());
+model.position.x -= center.x;
+model.position.z -= center.z;
+model.position.y -= box.min.y;
+model.traverse((child) => {
+if (child.isMesh) {
+child.castShadow = true;
+child.receiveShadow = true;
+child.material = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.5, metalness: 0.1 });
+}
+});
+mapGroup.add(model);
+statusEl.textContent = '🏙️ 3D 地圖：✅ 1:1 荔枝角戰區街景已載入';
+statusEl.style.color = '#059669';
+}, undefined, () => {
+buildFallbackLaiChiKokDistrict();
+statusEl.style.color = '#9A3412';
+});
+}
+
+loadRealHongKongModel();
+
+// 💡 香港特色結構：行人天橋 (Overpass Bridge)
+const bridgeMesh = new THREE.Mesh(new THREE.BoxGeometry(140, 4, 9), matBridge);
+bridgeMesh.position.set(0, 12, 3);
+bridgeMesh.castShadow = true;
+bridgeMesh.receiveShadow = true;
+mapGroup.add(bridgeMesh);
+
+[-58, -20, 20, 58].forEach((x) => {
+const pillar = new THREE.Mesh(new THREE.CylinderGeometry(1.2, 1.2, 12, 18), matBridge);
+pillar.position.set(x, 6, 3);
+pillar.castShadow = true;
+pillar.receiveShadow = true;
+mapGroup.add(pillar);
+});
+
+// --- 5. 平貼地面文字標籤 ---
+function createGroundLabel(text, x, z, isBridge = false) {
+const div = document.createElement('div');
+div.className = isBridge ? 'ground-label bridge' : 'ground-label';
+div.textContent = text;
+const labelObj = new THREE.CSS3DObject(div);
+labelObj.rotation.x = -Math.PI / 2;
+labelObj.position.set(x, 0.2, z);
+labelObj.scale.set(0.03, 0.03, 0.03);
+cssScene.add(labelObj);
+}
+
+createGroundLabel('長沙灣道 Cheung Sha Wan Rd', -6, 46);
+createGroundLabel('D2 Place One', -68, -88);
+createGroundLabel('D2 Place Two', 58, -92);
+createGroundLabel('🟢 行人天橋 (全陰影通道)', 0, 18, true);
+
+// --- 6. 導航軌跡繪製 (3D Route Lines) ---
+// 路綫 A: 避曬/天橋路綫 (綠色)
+const shadePathPoints = [
+new THREE.Vector3(-25, 0.5, 25),
+new THREE.Vector3(-20, 12.2, 3), // 上天橋
+new THREE.Vector3(20, 12.2, 3), // 穿過天橋
+new THREE.Vector3(25, 0.5, -20) // 到達 D2 Place 二期
+];
+const shadeRouteGeo = new THREE.BufferGeometry().setFromPoints(shadePathPoints);
+const shadeRouteMat = new THREE.LineBasicMaterial({ color: 0x10B981, linewidth: 5, transparent: true, opacity: 1.0 });
+const shadeRouteLine = new THREE.Line(shadeRouteGeo, shadeRouteMat);
+scene.add(shadeRouteLine);
+
+// 路綫 B: 直線路綫 (橘紅色)
+const directPathPoints = [
+new THREE.Vector3(-25, 0.5, 25),
+new THREE.Vector3(0, 0.5, 15),
+new THREE.Vector3(25, 0.5, -20)
+];
+const directRouteGeo = new THREE.BufferGeometry().setFromPoints(directPathPoints);
+const directRouteMat = new THREE.LineBasicMaterial({ color: 0xEF4444, linewidth: 3, transparent: true, opacity: 0.4 });
+const directRouteLine = new THREE.Line(directRouteGeo, directRouteMat);
+scene.add(directRouteLine);
+
+function selectRoute(type) {
+const cards = document.querySelectorAll('.route-card');
+cards.forEach(c => c.classList.remove('selected'));
+if(type === 'shade') {
+cards[0].classList.add('selected');
+shadeRouteMat.opacity = 1.0;
+directRouteMat.opacity = 0.3;
+} else {
+cards[1].classList.add('selected');
+shadeRouteMat.opacity = 0.3;
+directRouteMat.opacity = 1.0;
+}
+}
+
+// --- 7. Sun Position & Bus Logic ---
+const LAT = 22.3372, LNG = 114.1480;
+let currentSunAzimuthDeg = 0;
+let currentSunAltDeg = 0;
+let isCloudy = false;
+
+function updateSunPosition(decimalHour) {
+const now = new Date();
+const h = Math.floor(decimalHour), m = Math.floor((decimalHour - h) * 60);
+now.setHours(h, m, 0, 0);
+document.getElementById('time-text').textContent = `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}`;
+
+const sunPos = SunCalc.getPosition(now, LAT, LNG);
+const alt = sunPos.altitude, azi = sunPos.azimuth;
+
+currentSunAltDeg = alt * (180 / Math.PI);
+currentSunAzimuthDeg = (azi * (180 / Math.PI) + 180) % 360; // 轉為 0-360 方位角
+
+document.getElementById('alt-txt').textContent = `${currentSunAltDeg.toFixed(1)}°`;
+document.getElementById('azi-txt').textContent = `${currentSunAzimuthDeg.toFixed(1)}°`;
+
+const radius = 500;
+const x = radius * Math.cos(alt) * Math.sin(azi);
+const y = radius * Math.sin(alt);
+const z = radius * Math.cos(alt) * Math.cos(azi);
+sunLight.position.set(x, Math.max(y, 2), z);
+
+if(!isCloudy) {
+sunLight.intensity = alt < 0 ? 0.05 : Math.min(0.85, Math.sin(alt) * 1.2);
+}
+
+calcBusSeating(); // 同步計算巴士建議
+}
+
+// 💡 巴士坐位避曬演算法
+function calcBusSeating() {
+const busHeading = parseFloat(document.getElementById('bus-dir-select').value); // 巴士行駛方向角度
+// 計算太陽相對於巴士行駛方向的相對角度
+let relAngle = (currentSunAzimuthDeg - busHeading + 360) % 360;
+
+const sideTxt = document.getElementById('seat-side-txt');
+const deckTxt = document.getElementById('seat-deck-txt');
+
+if (currentSunAltDeg < 5) {
+sideTxt.textContent = "無直射陽光 (夜間/黃昏)";
+sideTxt.style.color = "#6B7280";
+} else if (relAngle > 0 && relAngle < 180) {
+sideTxt.textContent = "建議坐「左邊靠窗」";
+sideTxt.style.color = "#10B981";
+} else {
+sideTxt.textContent = "建議坐「右邊靠窗」";
+sideTxt.style.color = "#10B981";
+}
+
+// 上/下層輻射熱建議
+if (currentSunAltDeg > 60) {
+deckTxt.textContent = "下層 (太陽高懸，上層車頂極熱)";
+deckTxt.style.color = "#EF4444";
+} else {
+deckTxt.textContent = "上下層皆可 (陽光角度較斜)";
+deckTxt.style.color = "#374151";
+}
+}
+
+// 💡 天色切換 (晴天 vs 多雲漫射)
+function toggleCloudMode() {
+isCloudy = !isCloudy;
+const btn = document.getElementById('cloud-toggle-btn');
+const badge = document.getElementById('weather-badge');
+
+if(isCloudy) {
+sunLight.castShadow = false; // 陰天無視線陰影
+ambientLight.intensity = 0.95; // 漫射光增強
+btn.textContent = "切換為晴天 (直射光)";
+badge.textContent = "多雲漫射";
+badge.className = "badge badge-orange";
+} else {
+sunLight.castShadow = true;
+ambientLight.intensity = 0.65;
+btn.textContent = "切換為多雲/陰天";
+badge.textContent = "晴朗無雲";
+badge.className = "badge badge-green";
+}
+}
+
+// UI Tab Switcher
+function switchTab(tabId) {
+document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+
+document.querySelector(`[onclick="switchTab('${tabId}')"]`).classList.add('active');
+document.getElementById(tabId).classList.add('active');
+}
+
+// Event Listeners
+document.getElementById('time-slider').addEventListener('input', (e) => {
+updateSunPosition(parseFloat(e.target.value));
+});
+
+// Init
+updateSunPosition(14);
+
+window.addEventListener('resize', () => {
+camera.aspect = window.innerWidth / window.innerHeight;
+camera.updateProjectionMatrix();
+renderer.setSize(window.innerWidth, window.innerHeight);
+cssRenderer.setSize(window.innerWidth, window.innerHeight);
+});
+
+function animate() {
+requestAnimationFrame(animate);
+controls.update();
+renderer.render(scene, camera);
+cssRenderer.render(cssScene, camera);
+}
+animate();
+</script>
+</body>
