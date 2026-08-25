@@ -1,0 +1,477 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="theme-color" content="#f0f8ff">
+<title>🌧️ 香港降雨預報</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+
+<style>
+body {
+font-family: "Helvetica Neue", sans-serif;
+margin: 0;
+padding: 0;
+background: #f0f8ff;
+color: #333;
+text-align: center;
+}
+h1 {
+font-size: 1.4em;
+margin: 1em 0 0.5em;
+}
+#map {
+height: 300px;
+margin: 0 10px;
+border-radius: 8px;
+border: 1px solid #ccc;
+position: relative;
+}
+#ai-forecast {
+margin: 1em;
+padding: 1em;
+border: 2px solid #0077cc;
+border-radius: 8px;
+background: #fff;
+text-align: left;
+}
+#rain-alert {
+margin: 1em;
+font-size: 1.2em;
+font-weight: bold;
+line-height: 1.8em;
+white-space: pre-line;
+}
+#footer-text {
+margin: 1.5em;
+font-size: 0.9em;
+color: #555;
+line-height: 1.6em;
+}
+.promptBox {
+position: fixed;
+bottom: 20px;
+left: 10%;
+right: 10%;
+background: #fff3cd;
+color: #333;
+border: 1px solid #ffeeba;
+padding: 15px;
+border-radius: 10px;
+font-size: 0.95em;
+box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+z-index: 9999;
+}
+.promptBox button {
+margin-top: 10px;
+padding: 6px 12px;
+background: #0077cc;
+color: white;
+border: none;
+border-radius: 5px;
+}
+
+/* 🌤️ 地圖右上角：白色精簡天氣膠囊方塊 */
+.map-weather-pill {
+background: rgba(255, 255, 255, 0.95); /* 白色底 */
+border: 1px solid rgba(0, 0, 0, 0.15); /* 細邊框 */
+border-radius: 30px; /* 完美圓角膠囊 */
+padding: 5px 12px; /* 調整內邊距平衡視覺 */
+box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15); /* 微陰影 */
+display: flex;
+align-items: center;
+gap: 6px; /* 氣溫與圖標之間的間距 */
+pointer-events: auto;
+margin-top: 10px !important;
+margin-right: 10px !important;
+font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+.pill-temp {
+font-size: 15px;
+font-weight: bold;
+color: #111;
+}
+.pill-logo {
+display: inline-flex;
+align-items: center;
+justify-content: center;
+font-size: 16px;
+min-width: 22px;
+height: 22px;
+}
+.pill-logo img {
+width: 22px;
+height: 22px;
+object-fit: contain;
+}
+</style>
+
+<link rel="manifest" href="/manifest.json">
+<meta name="apple-mobile-web-app-capable" content="no">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="香港降雨預報">
+
+<script src="https://cdn.onesignal.com/sdks/OneSignalSDK.js" async></script>
+<script>
+window.OneSignal = window.OneSignal || [];
+OneSignal.push(function() {
+OneSignal.init({
+appId: "880241cd-cc45-4820-b5ec-a1236b0e3e98",
+safari_web_id: "🔑 換成你的 Safari Web ID"
+});
+});
+</script>
+</head>
+
+<body>
+<h1>🌂 香港降雨預報</h1>
+<div id="map"></div>
+
+<div id="ai-forecast">
+<strong>🧠 AI 超前預測</strong>
+<div id="rainMsg">⏳ 正在載入...</div>
+</div>
+
+<div id="rain-alert">⏳ 正在讀取預報資料...</div>
+
+<div id="customPrompt" class="promptBox" style="display:none;">
+📢 歡迎使用《香港降雨預報》<br>
+👉 你可以訂閱通知，即時收到降雨提示。<br>
+<button id="subscribeBtn">訂閱通知</button>
+<button id="closeCustomBtn">稍後再說</button>
+</div>
+
+<div id="iosPrompt" class="promptBox" style="display:none;">
+📱 如果你用 iPhone / iPad：<br>
+請先按 Safari 底部的 <b>分享</b> 按鈕 <br>
+➜ 再揀 <b>加入主畫面</b>才可收到推播通知。<br>
+<button id="iosCloseBtn">知道了</button>
+</div>
+
+<div id="footer-text">
+<p style="text-align: left; margin-bottom: 1.5em;">
+本網站提供香港未來最多六小時內定點的降雨預測，用戶可即時得知身處地點的降雨情況。
+</p>
+<p style="text-align: left; margin-bottom: 1.5em;">
+資料來源：香港天文台 / Tomorrow.io (AI 超前預測)
+</p>
+<p style="text-align: left; margin-bottom: 1.5em;">
+- 用戶請先允許定位服務
+</p>
+<p style="text-align: left; margin-bottom: 1.5em;">
+- 預報在某些情況可能會出現誤差
+</p>
+<p style="text-align: left; margin-bottom: 1.5em;">
+網站功能將不斷更新，敬請留意
+</p>
+</div>
+
+<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+<script>
+const workerUrl = 'https://crowdtest8r.ctakwah.workers.dev/';
+const TOMORROW_API_KEY = "Eff94C5FCuRqlqWKPt0tXwHM1niZNEYh";
+
+const map = L.map('map').setView([22.3, 114.2], 11);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+attribution: '&copy; OpenStreetMap contributors'
+}).addTo(map);
+
+// 🌦️ 定義地圖右上角精簡白色膠囊元件
+const WeatherControl = L.Control.extend({
+options: { position: 'topright' },
+onAdd: function(map) {
+const div = L.DomUtil.create('div', 'map-weather-pill');
+div.innerHTML = `
+<span class="pill-temp" id="pill-temp">--°</span>
+<span class="pill-logo" id="pill-logo">⏳</span>
+`;
+L.DomEvent.disableClickPropagation(div);
+return div;
+}
+});
+map.addControl(new WeatherControl());
+
+let marker;
+let rainStatus = 0; // 0 = 無雨，1 = 已推送過
+
+function setMarker(lat, lon) {
+if (marker) map.removeLayer(marker);
+marker = L.marker([lat, lon]).addTo(map);
+}
+
+// 根據 Tomorrow.io 的 weatherCode 對應精緻的實時天氣圖標
+function getWeatherIconByCode(code) {
+const iconMap = {
+0: "☀️", // Unknown -> 晴
+1000: "☀️", // Clear, Sunny
+1100: "🌤️", // Mostly Clear
+1101: "⛅", // Partly Cloudy
+1102: "🌥️", // Mostly Cloudy
+1001: "☁️", // Cloudy
+2000: "🌫️", // Fog
+2100: "🌫️", // Light Fog
+4000: "🌧️", // Drizzle
+4001: "🌧️", // Rain
+4200: "🌧️", // Light Rain
+4201: "🌧️", // Heavy Rain
+5000: "🌨️", // Snow
+8000: "⛈️" // Thunderstorm
+};
+return iconMap[code] || "🌤️";
+}
+
+// 天文台即時預報
+function fetchForecast(lat, lon) {
+fetch(`${workerUrl}?lat=${lat}&lon=${lon}`)
+.then(res => res.json())
+.then(data => {
+const alertDiv = document.getElementById('rain-alert');
+console.log("API 回傳資料：", data);
+
+// 1. 動態更新實時天文台氣溫（若 Worker 內包含數據）
+if (data && typeof data.temperature === "number") {
+document.getElementById('pill-temp').innerText = `${Math.round(data.temperature)}°`;
+}
+
+// 2. 混合雙向容錯機制：如果 Worker 有天文台圖標則使用，否則保留給 Tomorrow.io 判定
+const logoContainer = document.getElementById('pill-logo');
+if (data && data.weatherIcon) {
+const imgUrl = `https://www.hko.gov.hk/images/wxicon/pic${data.weatherIcon}.png`;
+const imgCheck = new Image();
+imgCheck.src = imgUrl;
+imgCheck.onload = function() {
+logoContainer.innerHTML = `<img src="${imgUrl}" alt="HKO Icon">`;
+};
+imgCheck.onerror = function() {
+if(logoContainer.innerText === "⏳") logoContainer.innerText = (data.immediateRain > 0.5) ? "🌧️" : "☁️";
+};
+}
+
+if (data && typeof data.immediateRain === "number") {
+if (data.immediateRain > 0.5) {
+alertDiv.innerText = `⚠️ 你所在的位置將會有雨`;
+if (rainStatus === 0) {
+speak("⚠️ 你所在的位置將會有雨");
+sendPush();
+rainStatus = 1;
+}
+} else {
+alertDiv.innerText = `☁️ 你所在的位置暫時無雨`;
+rainStatus = 0;
+}
+} else {
+alertDiv.innerText = "⚠️ 系統繁忙，請稍後再試";
+}
+})
+.catch(err => {
+console.error("讀取預報錯誤", err);
+document.getElementById('rain-alert').innerText = "⚠️ 系統繁忙，請稍後再試";
+});
+}
+
+// Tomorrow.io AI 預報與實時天氣狀態獲取
+function fetchTomorrowAI(lat, lon) {
+fetch(
+`https://api.tomorrow.io/v4/weather/forecast?location=${lat},${lon}&timesteps=1h&apikey=${TOMORROW_API_KEY}`
+)
+.then(res => res.json())
+.then(data => {
+console.log("Tomorrow.io:", data);
+
+if (!data.timelines || !data.timelines.hourly) {
+document.getElementById("rainMsg").innerText = "⚠️ AI 預報暫時不可用";
+return;
+}
+
+const currentHourData = data.timelines.hourly[0];
+
+// 1. 實時動態更新右上角天氣 Logo（使用高精度實時天氣代碼）
+if (currentHourData && currentHourData.values && currentHourData.values.weatherCode !== undefined) {
+const code = currentHourData.values.weatherCode;
+const logoContainer = document.getElementById('pill-logo');
+// 如果天文台圖片沒有成功載入，由此高精度代碼全面接管實時狀態
+if (logoContainer.getElementsByTagName('img').length === 0) {
+logoContainer.innerText = getWeatherIconByCode(code);
+}
+}
+
+// 2. 備用機制：如果自訂 Worker 未返回溫度，用這裡填補
+const pillTempEl = document.getElementById('pill-temp');
+if ((pillTempEl.innerText === "--°" || pillTempEl.innerText === "0°") && currentHourData && currentHourData.values.temperature !== undefined) {
+const currentTemp = Math.round(currentHourData.values.temperature);
+pillTempEl.innerText = `${currentTemp}°`;
+}
+
+const hours = data.timelines.hourly.slice(0, 6);
+let msg = "☀️ 未來六小時暫時無明顯降雨";
+
+for (let i = 0; i < hours.length; i++) {
+const rain = hours[i].values.rainIntensity || 0;
+if (rain >= 3) {
+if (i === 0) {
+msg = "🌧 一小時內可能有雨";
+}
+else if (i === 1) {
+msg = "🌧 一小時內可能有雨";
+}
+else if (i === 2) {
+msg = "🌧 兩小時內可能有雨";
+}
+else {
+msg = "🌧 約六小時內可能有雨";
+}
+break;
+}
+}
+document.getElementById("rainMsg").innerText = msg;
+})
+.catch(err => {
+console.error(err);
+document.getElementById("rainMsg").innerText = "⚠️ AI 預報讀取失敗";
+});
+}
+
+function speak(text) {
+const msg = new SpeechSynthesisUtterance(text);
+msg.lang = 'zh-HK';
+speechSynthesis.speak(msg);
+}
+
+// ===================================================
+// OneSignal 訂閱同步到 Cloudflare
+// ===================================================
+async function registerSubscription(lat, lon) {
+
+try {
+
+const subscriptionId =
+await OneSignal.User.PushSubscription.id;
+
+console.log("Subscription ID =", subscriptionId);
+alert("Subscription ID = " + subscriptionId);
+
+if (!subscriptionId) {
+
+console.warn("⚠️ 尚未取得 Subscription ID");
+return;
+
+}
+
+console.log("✅ Subscription ID:", subscriptionId);
+
+const response = await fetch(
+workerUrl + "registerLocation",
+{
+method: "POST",
+headers: {
+"Content-Type": "application/json"
+},
+body: JSON.stringify({
+playerId: subscriptionId,
+lat,
+lon
+})
+}
+);
+
+const result = await response.json();
+
+console.log("📍 registerLocation:", result);
+
+} catch (err) {
+
+console.error("❌ registerLocation 失敗:", err);
+
+}
+
+}
+
+function sendPush() {
+const REST_API_KEY = "os_v2_app_rabedtomivecbnpmuerwwdr6tciiske3mk5ez3mancrg7qmdy275ruzqq3c623gckamggtnnaqow5hyvghfdfbhhcbq2llehcl6jwki";
+
+fetch("https://onesignal.com/api/v1/notifications", {
+method: "POST",
+headers: {
+"Content-Type": "application/json; charset=utf-8",
+"Authorization": "Basic " + REST_API_KEY
+},
+body: JSON.stringify({
+app_id: "880241cd-cc45-4820-b5ec-a1236b0e3e98",
+included_segments: ["Subscribed Users"],
+headings: { "en": "⚠️ 降雨提示" },
+contents: { "en": "你所在的位置將會有雨" },
+url: "https://safecrossinghk.github.io",
+large_icon: "https://cdn-icons-png.flaticon.com/512/1146/1146869.png"
+})
+})
+.then(res => res.json())
+.then(response => console.log("✅ 推播已送出", response))
+.catch(err => console.error("❌ 推播失敗", err));
+}
+
+function initLocation() {
+if (!navigator.geolocation) {
+alert("此瀏覽器不支援定位功能");
+const fallbackLat = 22.3, fallbackLon = 114.2;
+map.setView([fallbackLat, fallbackLon], 11);
+setMarker(fallbackLat, fallbackLon);
+fetchForecast(fallbackLat, fallbackLon);
+fetchTomorrowAI(fallbackLat, fallbackLon);
+registerSubscription(lat, lon);
+return;
+}
+navigator.geolocation.getCurrentPosition(
+pos => {
+const lat = pos.coords.latitude;
+const lon = pos.coords.longitude;
+console.log("✅ 取得定位：", lat, lon);
+map.setView([lat, lon], 13);
+setMarker(lat, lon);
+fetchForecast(lat, lon);
+fetchTomorrowAI(lat, lon);
+},
+err => {
+console.warn("⚠️ 定位失敗，使用預設位置");
+const fallbackLat = 22.3, fallbackLon = 114.2;
+map.setView([fallbackLat, fallbackLon], 11);
+setMarker(fallbackLat, fallbackLon);
+fetchForecast(fallbackLat, fallbackLon);
+fetchTomorrowAI(fallbackLat, fallbackLon);
+},
+{ enableHighAccuracy: true }
+);
+}
+
+function showIosPromptOnce() {
+if (/iPhone|iPad|iPod/i.test(navigator.userAgent)) {
+if (!localStorage.getItem("iosPromptShown")) {
+document.getElementById("iosPrompt").style.display = "block";
+document.getElementById("iosCloseBtn").onclick = function() {
+document.getElementById("iosPrompt").style.display = "none";
+localStorage.setItem("iosPromptShown", "1");
+};
+}
+}
+}
+
+function showCustomPrompt() {
+if (localStorage.getItem("subscribedToRainAlert")) return;
+document.getElementById("customPrompt").style.display = "block";
+document.getElementById("subscribeBtn").onclick = function() {
+OneSignal.push(function() {
+OneSignal.showNativePrompt();
+});
+document.getElementById("customPrompt").style.display = "none";
+localStorage.setItem("subscribedToRainAlert", "1");
+};
+document.getElementById("closeCustomBtn").onclick = function() {
+document.getElementById("customPrompt").style.display = "none";
+};
+}
+
+initLocation();
+showIosPromptOnce();
+showCustomPrompt();
+</script>
+</body>
+</html>
