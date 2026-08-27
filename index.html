@@ -1,3 +1,4 @@
+
 <!doctype html>
 <html lang="zh-Hant-HK">
   <head>
@@ -8,55 +9,35 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="安全過路 HK" />
     <title>安全過路 HK｜LSK001 測試</title>
-    <link rel="manifest" href="./manifest.webmanifest" />
-    <link rel="apple-touch-icon" href="./icons/icon.svg" />
-    <link rel="stylesheet" href="./src/styles.css" />
-    <script type="module" src="./src/main.js"></script>
+    <link rel="manifest" href="./manifest.json" />
+    <link rel="icon" href="./icon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="./icon.svg" />
+    <link rel="stylesheet" href="./styles.css" />
+    <script type="module" src="./main.js"></script>
   </head>
   <body>
     <main class="app-shell" data-app>
       <section class="hero" aria-labelledby="app-title">
         <p class="eyebrow">LSK001 PWA 測試版</p>
         <h1 id="app-title">安全過路 HK</h1>
-        <p class="hero__summary">只支援香港荔枝角道東行 × 長荔街，使用 GPS 判斷 30 米範圍並記錄行人燈轉燈時間。</p>
+        <p class="hero__summary">第一步只建立 PWA 基本架構及首頁 UI，暫不加入 GPS、AI、Cloudflare Worker、D1、相機或 OCR。</p>
       </section>
 
       <section class="card junction-card" aria-labelledby="junction-title">
         <div>
           <p class="label">測試路口</p>
-          <h2 id="junction-title" data-road-name>荔枝角道東行 × 長荔街</h2>
-          <p class="road-id">ROAD_ID：<strong data-road-id>LSK001</strong></p>
+          <h2 id="junction-title">荔枝角道東行 × 長荔街</h2>
+          <p class="road-id">ROAD_ID：<strong>LSK001</strong></p>
         </div>
         <span class="status-pill">PWA</span>
       </section>
 
-      <section class="card stats-grid" aria-label="定位及倒數狀態">
-        <div>
-          <p class="label">距離路口</p>
-          <strong data-distance>等待 GPS</strong>
-        </div>
-        <div>
-          <p class="label">GPS 精準度</p>
-          <strong data-accuracy>等待 GPS</strong>
-        </div>
-        <div>
-          <p class="label">平均週期</p>
-          <strong data-average-cycle>讀取中</strong>
-        </div>
-        <div>
-          <p class="label">倒數</p>
-          <strong data-countdown>等待資料</strong>
-        </div>
-      </section>
-
       <section class="card action-card" aria-labelledby="action-title">
         <p class="label">位置狀態</p>
-        <h2 id="action-title" data-location-status data-state="waiting">等待 GPS 定位</h2>
-        <p class="muted">進入路口 30 米範圍後，以下按鈕會啟用。按下後會提交 road_id、timestamp、latitude、longitude、accuracy 到 Cloudflare Worker。</p>
-        <button class="signal-button" type="button" data-signal-button disabled>
-          剛剛轉燈
-        </button>
-        <p class="note">第一版不使用 AI、相機、OCR、高德地圖或登入功能。</p>
+        <h2 id="action-title">等待下一步加入 30 米範圍判斷</h2>
+        <p class="muted">進入路口 30 米範圍後，下一步才會啟用以下大型按鈕。</p>
+        <button class="signal-button" type="button" disabled>剛剛轉燈</button>
+        <p class="note">本次只修正 GitHub Pages 的相對檔案路徑及 PWA 載入問題。</p>
       </section>
     </main>
   </body>
