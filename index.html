@@ -14,6 +14,7 @@
     <link rel="apple-touch-icon" href="./icon.svg" />
     <link rel="stylesheet" href="./styles.css" />
     <script type="module" src="./main.js"></script>
+    <script type="module" src="./health-check.js"></script>
   </head>
   <body>
     <main class="app-shell" data-app>
@@ -39,6 +40,14 @@
         <button class="signal-button" type="button" disabled>剛剛轉燈</button>
         <p class="note">本次只修正 GitHub Pages 的相對檔案路徑及 PWA 載入問題。</p>
       </section>
+
+     <section class="card" aria-labelledby="worker-health-title">
+       <p class="label">Worker API</p>
+       <h2 id="worker-health-title">Cloudflare Worker 連線測試</h2>
+       <p class="muted" data-worker-health-status>等待測試…</p>
+       <p class="note" data-worker-health-detail></p>
+      </section>
+
     </main>
   </body>
 </html>
