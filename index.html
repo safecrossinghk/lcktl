@@ -34,12 +34,41 @@
       </section>
 
       <section class="card action-card" aria-labelledby="action-title">
-        <p class="label">位置狀態</p>
-        <h2 id="action-title">等待下一步加入 30 米範圍判斷</h2>
-        <p class="muted">進入路口 30 米範圍後，下一步才會啟用以下大型按鈕。</p>
-        <button class="signal-button" type="button" disabled>剛剛轉燈</button>
-        <p class="note">本次只修正 GitHub Pages 的相對檔案路徑及 PWA 載入問題。</p>
-      </section>
+  <p class="label">位置狀態</p>
+
+  <h2 id="action-title" data-location-status>
+    正在取得 GPS 位置…
+  </h2>
+
+  <p class="muted">
+    目前只測試 GPS 位置及距離 LSK001 路口的距離。
+  </p>
+
+  <div class="location-info">
+    <p>
+      <span class="label">距離 LSK001</span><br />
+      <strong data-distance>等待 GPS…</strong>
+    </p>
+
+    <p>
+      <span class="label">GPS 精度</span><br />
+      <strong data-accuracy>等待 GPS…</strong>
+    </p>
+  </div>
+
+  <button
+    class="signal-button"
+    type="button"
+    disabled
+    data-signal-button
+  >
+    剛剛轉燈
+  </button>
+
+  <p class="note">
+    「剛剛轉燈」功能暫未啟用，本階段只測試 GPS 及距離計算。
+  </p>
+</section>
 
      <section class="card" aria-labelledby="worker-health-title">
        <p class="label">Worker API</p>
