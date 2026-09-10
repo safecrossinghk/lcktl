@@ -1,37 +1,208 @@
 const WORKER_API = 'https://lsk001-api.ctakwah.workers.dev';
 
+const elements = {
+  status: document.querySelector('[data-location-status]'),
+  distance: document.querySelector('[data-distance]'),
+  accuracy: document.querySelector('[data-accuracy]'),
+  signalButton: document.querySelector('[data-signal-button]')
+};
+
+let roads = [];
+let targetRoad = null;
+
+
+// ===================================================
+// 1. 讀取 Worker /api/roads
+// ===================================================
+
 async function loadRoads() {
+  const response = await fetch(`${WORKER_API}/api/roads`);
+
+  if (!response.ok) {
+    throw new Error(`道路資料 HTTP ${response.status}`);
+  }
+
+  const data = await response.json();
+
+  if (!data.ok || !Array.isArray(data.roads)) {
+    throw new Error('道路資料格式不正確');
+  }
+
+  roads = data.roads;
+
+  if (roads.length === 0) {
+    throw new Error('目前沒有可用道路資料');
+  }
+
+  targetRoad = roads.find(
+    (road) => road.road_id === 'LSK001'
+  ) || roads[0];
+
+  console.log('LSK001 道路資料：', targetRoad);
+
+  return targetRoad;
+}
+
+
+// ===================================================
+// 2. 計算兩個 GPS 座標之間的距離
+//    使用 Haversine formula
+// ===================================================
+
+function distanceMeters(point1, point2) {
+  const earthRadius = 6371000;
+
+  const lat1 = point1.latitude * Math.PI / 180;
+  const lat2 = point2.latitude * Math.PI / 180;
+
+  const deltaLat =
+    (point2.latitude - point1.latitude) * Math.PI / 180;
+
+  const deltaLon =
+    (point2.longitude - point1.longitude) * Math.PI / 180;
+
+  const a =
+    Math.sin(deltaLat / 2) ** 2 +
+    Math.cos(lat1) *
+    Math.cos(lat2) *
+    Math.sin(deltaLon / 2) ** 2;
+
+  const c =
+    2 * Math.atan2(
+      Math.sqrt(a),
+      Math.sqrt(1 - a)
+    );
+
+  return earthRadius * c;
+}
+
+
+// ===================================================
+// 3. 顯示 GPS 位置
+// ===================================================
+
+function handlePosition(position) {
+  if (!targetRoad) {
+    elements.status.textContent =
+      '尚未取得 LSK001 道路資料。';
+
+    return;
+  }
+
+  const latitude = position.coords.latitude;
+  const longitude = position.coords.longitude;
+  const accuracy = position.coords.accuracy;
+
+  const userPosition = {
+    latitude,
+    longitude
+  };
+
+  const roadPosition = {
+    latitude: targetRoad.latitude,
+    longitude: targetRoad.longitude
+  };
+
+  const distance = distanceMeters(
+    userPosition,
+    roadPosition
+  );
+
+  elements.status.textContent =
+    '已取得 GPS 位置';
+
+  elements.distance.textContent =
+    `${Math.round(distance)} 米`;
+
+  elements.accuracy.textContent =
+    `±${Math.round(accuracy)} 米`;
+
+  console.log('GPS latitude：', latitude);
+  console.log('GPS longitude：', longitude);
+  console.log('GPS accuracy：', accuracy);
+  console.log('距離 LSK001：', Math.round(distance), '米');
+}
+
+
+// ===================================================
+// 4. GPS 錯誤處理
+// ===================================================
+
+function handlePositionError(error) {
+  console.error('GPS error：', error);
+
+  if (error.code === 1) {
+    elements.status.textContent =
+      'GPS 權限被拒絕，請允許網站使用位置。';
+
+  } else if (error.code === 2) {
+    elements.status.textContent =
+      '暫時無法取得 GPS 位置。';
+
+  } else if (error.code === 3) {
+    elements.status.textContent =
+      'GPS 定位逾時，請稍後再試。';
+
+  } else {
+    elements.status.textContent =
+      '無法取得 GPS 位置。';
+  }
+
+  elements.distance.textContent =
+    '無法計算';
+
+  elements.accuracy.textContent =
+    '無法取得';
+}
+
+
+// ===================================================
+// 5. 開始 GPS
+// ===================================================
+
+function startGPS() {
+  if (!navigator.geolocation) {
+    elements.status.textContent =
+      '此裝置不支援 GPS 定位。';
+
+    return;
+  }
+
+  elements.status.textContent =
+    '正在取得 GPS 位置…';
+
+  navigator.geolocation.watchPosition(
+    handlePosition,
+    handlePositionError,
+    {
+      enableHighAccuracy: true,
+      maximumAge: 10000,
+      timeout: 15000
+    }
+  );
+}
+
+
+// ===================================================
+// 6. 初始化
+// ===================================================
+
+async function init() {
   try {
-    const response = await fetch(`${WORKER_API}/api/roads`);
-
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}`);
-    }
-
-    const data = await response.json();
-
-    console.log('LSK001 roads API:', data);
-
-    if (!data.ok || !Array.isArray(data.roads)) {
-      throw new Error('道路資料格式不正確');
-    }
-
-    if (data.roads.length === 0) {
-      console.warn('Roads API 暫時沒有道路資料');
-      return;
-    }
-
-    const road = data.roads[0];
-
-    console.log('目前道路：', road.name);
-    console.log('ROAD_ID：', road.road_id);
-    console.log('Latitude：', road.latitude);
-    console.log('Longitude：', road.longitude);
-    console.log('Radius：', road.radius);
-
+    await loadRoads();
+    startGPS();
   } catch (error) {
-    console.error('讀取道路資料失敗：', error);
+    console.error('LSK001 初始化失敗：', error);
+
+    elements.status.textContent =
+      '無法取得 LSK001 道路資料。';
+
+    elements.distance.textContent =
+      '無法計算';
+
+    elements.accuracy.textContent =
+      '無法取得';
   }
 }
 
-loadRoads();
+init();
