@@ -78,7 +78,7 @@ function distanceMeters(point1, point2) {
 
 
 // ===================================================
-// 3. 顯示 GPS 位置
+// 3. 顯示 GPS 位置 + 100 米範圍判斷
 // ===================================================
 
 function handlePosition(position) {
@@ -108,19 +108,45 @@ function handlePosition(position) {
     roadPosition
   );
 
-  elements.status.textContent =
-    '已取得 GPS 位置';
+  // 使用 D1 roads 表內的 radius
+  // 目前 LSK001 = 100 米
+  const radius = Number(targetRoad.radius) || 100;
 
+  // =================================================
+  // 100 米範圍判斷
+  // =================================================
+
+  if (distance <= radius) {
+    elements.status.textContent =
+      `已進入 LSK001 ${radius} 米範圍`;
+  } else {
+    elements.status.textContent =
+      `尚未進入 LSK001 ${radius} 米範圍`;
+  }
+
+  // 顯示距離
   elements.distance.textContent =
     `${Math.round(distance)} 米`;
 
+  // 顯示 GPS 精度
   elements.accuracy.textContent =
     `±${Math.round(accuracy)} 米`;
+
+  // =================================================
+  // 今階段仍然不啟用「剛剛轉燈」
+  // =================================================
+
+  elements.signalButton.disabled = true;
 
   console.log('GPS latitude：', latitude);
   console.log('GPS longitude：', longitude);
   console.log('GPS accuracy：', accuracy);
   console.log('距離 LSK001：', Math.round(distance), '米');
+  console.log('LSK001 範圍：', radius, '米');
+  console.log(
+    '是否進入範圍：',
+    distance <= radius ? 'YES' : 'NO'
+  );
 }
 
 
