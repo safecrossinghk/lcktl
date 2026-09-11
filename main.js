@@ -126,7 +126,7 @@ function handlePosition(position) {
 
   // 顯示距離
   elements.distance.textContent =
-    `${Math.round(distance)} 米`;
+  `${distance.toFixed(1)} 米`;
 
   // 顯示 GPS 精度
   elements.accuracy.textContent =
