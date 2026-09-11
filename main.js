@@ -82,71 +82,74 @@ function distanceMeters(point1, point2) {
 // ===================================================
 
 function handlePosition(position) {
-  if (!targetRoad) {
-    elements.status.textContent =
-      '尚未取得 LSK001 道路資料。';
+if (!targetRoad) {
+elements.status.textContent =
+'尚未取得 LSK001 道路資料。';
 
-    return;
-  }
+return;
+}
 
-  const latitude = position.coords.latitude;
-  const longitude = position.coords.longitude;
-  const accuracy = position.coords.accuracy;
+const latitude = position.coords.latitude;
+const longitude = position.coords.longitude;
+const accuracy = position.coords.accuracy;
 
-  const userPosition = {
-    latitude,
-    longitude
-  };
+const userPosition = {
+latitude,
+longitude
+};
 
-  const roadPosition = {
-    latitude: targetRoad.latitude,
-    longitude: targetRoad.longitude
-  };
+const roadPosition = {
+latitude: targetRoad.latitude,
+longitude: targetRoad.longitude
+};
 
-  const distance = distanceMeters(
-    userPosition,
-    roadPosition
-  );
+const distance = distanceMeters(
+userPosition,
+roadPosition
+);
 
-  // 使用 D1 roads 表內的 radius
-  // 目前 LSK001 = 100 米
-  const radius = Number(targetRoad.radius) || 100;
+// 使用 D1 roads 表內的 radius
+// 目前 LSK001 = 100 米
+const radius = Number(targetRoad.radius) || 100;
 
-  // =================================================
-  // 100 米範圍判斷
-  // =================================================
+// =================================================
+// 100 米範圍判斷
+// =================================================
 
-  if (distance <= radius) {
-    elements.status.textContent =
-      `已進入 LSK001 ${radius} 米範圍`;
-  } else {
-    elements.status.textContent =
-      `尚未進入 LSK001 ${radius} 米範圍`;
-  }
+if (distance <= radius) {
+elements.status.textContent =
+`已進入 LSK001 ${radius} 米範圍`;
 
-  // 顯示距離
-  elements.distance.textContent =
-  `${distance.toFixed(1)} 米`;
+// 進入 100 米範圍
+// 啟用「剛剛轉燈」
+elements.signalButton.disabled = false;
 
-  // 顯示 GPS 精度
-  elements.accuracy.textContent =
-    `±${Math.round(accuracy)} 米`;
+} else {
+elements.status.textContent =
+`尚未進入 LSK001 ${radius} 米範圍`;
 
-  // =================================================
-  // 今階段仍然不啟用「剛剛轉燈」
-  // =================================================
+// 超過 100 米
+// 禁止按「剛剛轉燈」
+elements.signalButton.disabled = true;
+}
 
-  elements.signalButton.disabled = true;
+// 顯示距離，小數 1 位
+elements.distance.textContent =
+`${distance.toFixed(1)} 米`;
 
-  console.log('GPS latitude：', latitude);
-  console.log('GPS longitude：', longitude);
-  console.log('GPS accuracy：', accuracy);
-  console.log('距離 LSK001：', Math.round(distance), '米');
-  console.log('LSK001 範圍：', radius, '米');
-  console.log(
-    '是否進入範圍：',
-    distance <= radius ? 'YES' : 'NO'
-  );
+// 顯示 GPS 精度
+elements.accuracy.textContent =
+`±${Math.round(accuracy)} 米`;
+
+console.log('GPS latitude：', latitude);
+console.log('GPS longitude：', longitude);
+console.log('GPS accuracy：', accuracy);
+console.log('距離 LSK001：', distance.toFixed(1), '米');
+console.log('LSK001 範圍：', radius, '米');
+console.log(
+'是否進入範圍：',
+distance <= radius ? 'YES' : 'NO'
+);
 }
 
 
