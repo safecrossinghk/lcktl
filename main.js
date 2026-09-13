@@ -7,6 +7,14 @@ const elements = {
   signalButton: document.querySelector('[data-signal-button]')
 };
 
+elements.signalButton.addEventListener('click', () => {
+  console.log('LSK001「剛剛轉燈」按鈕已按下');
+
+  elements.signalButton.textContent = '已按下「剛剛轉燈」';
+
+  elements.signalButton.disabled = true;
+});
+
 let roads = [];
 let targetRoad = null;
 
