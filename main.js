@@ -7,16 +7,9 @@ const elements = {
   signalButton: document.querySelector('[data-signal-button]')
 };
 
-elements.signalButton.addEventListener('click', () => {
-  console.log('LSK001「剛剛轉燈」按鈕已按下');
-
-  elements.signalButton.textContent = '已按下「剛剛轉燈」';
-
-  elements.signalButton.disabled = true;
-});
-
 let roads = [];
 let targetRoad = null;
+let latestPosition = null;
 
 
 // ===================================================
@@ -100,6 +93,12 @@ return;
 const latitude = position.coords.latitude;
 const longitude = position.coords.longitude;
 const accuracy = position.coords.accuracy;
+
+latestPosition = {
+  latitude,
+  longitude,
+  accuracy
+};
 
 const userPosition = {
 latitude,
@@ -241,5 +240,200 @@ async function init() {
       '無法取得';
   }
 }
+
+
+// ===================================================
+// 7. 記錄 GREEN / RED 訊號事件
+// ===================================================
+
+const signalChoice = document.querySelector(
+  '[data-signal-choice]'
+);
+
+const signalResult = document.querySelector(
+  '[data-signal-result]'
+);
+
+const signalStateButtons = document.querySelectorAll(
+  '[data-signal-state]'
+);
+
+
+// 「剛剛轉燈」按鈕
+elements.signalButton.addEventListener(
+  'click',
+  () => {
+
+    if (!latestPosition || !targetRoad) {
+      signalResult.textContent =
+        '尚未取得 GPS 位置。';
+
+      signalChoice.hidden = false;
+
+      return;
+    }
+
+    const roadPosition = {
+      latitude: targetRoad.latitude,
+      longitude: targetRoad.longitude
+    };
+
+    const userPosition = {
+      latitude: latestPosition.latitude,
+      longitude: latestPosition.longitude
+    };
+
+    const distance = distanceMeters(
+      userPosition,
+      roadPosition
+    );
+
+    const radius =
+      Number(targetRoad.radius) || 100;
+
+    if (distance > radius) {
+
+      signalResult.textContent =
+        `目前距離 LSK001 ${distance.toFixed(1)} 米，超過 ${radius} 米範圍。`;
+
+      signalChoice.hidden = false;
+
+      return;
+    }
+
+    signalResult.textContent =
+      '請選擇剛才的燈號。';
+
+    signalChoice.hidden = false;
+  }
+);
+
+
+// GREEN / RED 選擇
+signalStateButtons.forEach(
+  (button) => {
+
+    button.addEventListener(
+      'click',
+      async () => {
+
+        if (!latestPosition || !targetRoad) {
+          signalResult.textContent =
+            '尚未取得 GPS 位置。';
+
+          return;
+        }
+
+        const state =
+          button.dataset.signalState;
+
+        const roadPosition = {
+          latitude: targetRoad.latitude,
+          longitude: targetRoad.longitude
+        };
+
+        const userPosition = {
+          latitude: latestPosition.latitude,
+          longitude: latestPosition.longitude
+        };
+
+        const distance =
+          distanceMeters(
+            userPosition,
+            roadPosition
+          );
+
+        const radius =
+          Number(targetRoad.radius) || 100;
+
+        if (distance > radius) {
+
+          signalResult.textContent =
+            `目前距離 ${distance.toFixed(1)} 米，已超出 ${radius} 米範圍。`;
+
+          return;
+        }
+
+        signalStateButtons.forEach(
+          (item) => {
+            item.disabled = true;
+          }
+        );
+
+        signalResult.textContent =
+          `正在記錄 ${state === 'GREEN' ? '🟢 轉綠' : '🔴 轉紅'}…`;
+
+        try {
+
+          const response = await fetch(
+            `${WORKER_API}/api/signal-events`,
+            {
+              method: 'POST',
+
+              headers: {
+                'Content-Type':
+                  'application/json'
+              },
+
+              body: JSON.stringify({
+                road_id: targetRoad.road_id,
+
+                state,
+
+                latitude:
+                  latestPosition.latitude,
+
+                longitude:
+                  latestPosition.longitude,
+
+                accuracy:
+                  latestPosition.accuracy,
+
+                distance_m:
+                  distance
+              })
+            }
+          );
+
+          const data =
+            await response.json();
+
+          if (!response.ok || !data.ok) {
+
+            throw new Error(
+              data.message ||
+              data.error ||
+              `HTTP ${response.status}`
+            );
+          }
+
+          signalResult.textContent =
+            `✅ 已記錄 ${state === 'GREEN' ? '🟢 轉綠' : '🔴 轉紅'}（事件 ID：${data.event.id}）`;
+
+          console.log(
+            '訊號事件已記錄：',
+            data.event
+          );
+
+        } catch (error) {
+
+          console.error(
+            '訊號事件記錄失敗：',
+            error
+          );
+
+          signalResult.textContent =
+            `❌ 記錄失敗：${error.message}`;
+
+          signalStateButtons.forEach(
+            (item) => {
+              item.disabled = false;
+            }
+          );
+        }
+      }
+    );
+  }
+);
 
 init();
