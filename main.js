@@ -408,12 +408,18 @@ signalStateButtons.forEach(
           }
 
           signalResult.textContent =
-            `✅ 已記錄 ${state === 'GREEN' ? '🟢 轉綠' : '🔴 轉紅'}（事件 ID：${data.event.id}）`;
+  `✅ 已記錄 ${state === 'GREEN' ? '🟢 轉綠' : '🔴 轉紅'}（事件 ID：${data.event.id}）`;
 
-          console.log(
-            '訊號事件已記錄：',
-            data.event
-          );
+console.log(
+  '訊號事件已記錄：',
+  data.event
+);
+
+signalStateButtons.forEach(
+  (item) => {
+    item.disabled = false;
+  }
+);
 
         } catch (error) {
 
