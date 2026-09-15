@@ -57,17 +57,41 @@
   </div>
 
   <button
-    class="signal-button"
-    type="button"
-    disabled
-    data-signal-button
-  >
-    剛剛轉燈
-  </button>
+  class="signal-button"
+  type="button"
+  disabled
+  data-signal-button
+>
+  剛剛轉燈
+</button>
 
-  <p class="note">
-    進入 LSK001 100 米範圍後，可以按「剛剛轉燈」。
-  </p>
+<div class="signal-choice" data-signal-choice hidden>
+  <p class="label">請選擇剛才的燈號</p>
+
+  <div class="signal-choice-buttons">
+    <button
+      class="signal-choice-button green-button"
+      type="button"
+      data-signal-state="GREEN"
+    >
+      🟢 轉綠
+    </button>
+
+    <button
+      class="signal-choice-button red-button"
+      type="button"
+      data-signal-state="RED"
+    >
+      🔴 轉紅
+    </button>
+  </div>
+
+  <p class="note" data-signal-result></p>
+</div>
+
+<p class="note">
+  進入 LSK001 100 米範圍後，可以按「剛剛轉燈」。
+</p>
 </section>
 
      <section class="card" aria-labelledby="worker-health-title">
