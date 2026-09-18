@@ -135,3 +135,101 @@ h2 { font-size: clamp(1.35rem, 5vw, 2rem); }
 
   .junction-card { display: grid; }
 }
+
+.signal-choice {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.signal-choice-buttons {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+}
+
+.signal-choice-button {
+  min-height: 4.5rem;
+  border: 0;
+  border-radius: 1rem;
+  color: #fff;
+  font-size: 1.4rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.green-button {
+  background: #16a34a;
+}
+
+.red-button {
+  background: #dc2626;
+}
+
+.signal-choice-button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+@media (max-width: 28rem) {
+  .signal-choice-buttons {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* =========================================
+   LSK001 實驗倒數
+   ========================================= */
+
+.countdown-panel {
+  margin-top: 1rem;
+  padding: 1.25rem;
+  border-radius: 1.25rem;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  text-align: center;
+}
+
+.countdown-label {
+  margin: 0 0 0.5rem;
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+.countdown-state {
+  margin-bottom: 0.25rem;
+  font-size: 1.4rem;
+  font-weight: 800;
+}
+
+.countdown-number {
+  line-height: 1;
+  margin: 0.75rem 0;
+}
+
+.countdown-number [data-countdown-seconds] {
+  font-size: 4.5rem;
+  font-weight: 900;
+  letter-spacing: -0.08em;
+}
+
+.countdown-unit {
+  margin-left: 0.35rem;
+  font-size: 1.2rem;
+  font-weight: 700;
+}
+
+.countdown-info {
+  margin: 0;
+  font-size: 0.9rem;
+  color: #64748b;
+}
+
+@media (max-width: 28rem) {
+  .countdown-panel {
+    padding: 1rem;
+  }
+
+  .countdown-number [data-countdown-seconds] {
+    font-size: 3.8rem;
+  }
+}
