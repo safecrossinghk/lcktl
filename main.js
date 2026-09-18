@@ -321,7 +321,13 @@ function updateCountdownDisplay(remainingSec) {
 // ===================================================
 
 function startLocalCountdown() {
-  stopCountdownTimer();
+
+  // 如果之前已有倒數 timer，只停止舊 timer
+  // 但不要清除 countdownEndAtMs
+  if (countdownTimer !== null) {
+    clearInterval(countdownTimer);
+    countdownTimer = null;
+  }
 
   if (
     !countdownState ||
