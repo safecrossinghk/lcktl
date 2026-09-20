@@ -148,8 +148,6 @@ function handlePosition(position) {
     elements.status.textContent =
       `已進入 LSK001 ${radius} 米範圍`;
 
-    // 進入 100 米範圍
-    // 啟用「剛剛轉燈」
     elements.signalButton.disabled = false;
 
   } else {
@@ -157,17 +155,13 @@ function handlePosition(position) {
     elements.status.textContent =
       `尚未進入 LSK001 ${radius} 米範圍`;
 
-    // 超過 100 米
-    // 禁止按「剛剛轉燈」
     elements.signalButton.disabled = true;
   }
 
 
-  // 顯示距離，小數 1 位
   elements.distance.textContent =
     `${distance.toFixed(1)} 米`;
 
-  // 顯示 GPS 精度
   elements.accuracy.textContent =
     `±${Math.round(accuracy)} 米`;
 
@@ -306,13 +300,18 @@ function updateCountdownDisplay(remainingSec) {
   countdownElements.seconds.textContent =
     Math.max(0, Math.round(remainingSec));
 
+  let modelText =
+    countdownModel?.source === 'TIME_DISTANCE_WEIGHTED'
+      ? '最接近當刻＋時間距離加權'
+      : '整體資料';
+
+  if (countdownModel?.fieldCorrectionApplied) {
+    modelText +=
+      `｜GREEN 實測 ${countdownModel.greenCorrectionSec.toFixed(1)} 秒`;
+  }
+
   countdownElements.info.textContent =
-    '實驗倒數｜資料模型：' +
-    (
-      countdownModel?.source === 'TIME_BUCKET'
-        ? '目前時段'
-        : '整體資料'
-    );
+    '實驗倒數｜資料模型：' + modelText;
 }
 
 
@@ -322,8 +321,6 @@ function updateCountdownDisplay(remainingSec) {
 
 function startLocalCountdown() {
 
-  // 如果之前已有倒數 timer，只停止舊 timer
-  // 但不要清除 countdownEndAtMs
   if (countdownTimer !== null) {
     clearInterval(countdownTimer);
     countdownTimer = null;
@@ -341,7 +338,7 @@ function startLocalCountdown() {
 
     const nowMs = Date.now();
 
-    // 最新 GREEN 超過 10 分鐘
+    // 最新 GREEN 超過 2 小時
     // 就停止顯示實驗倒數
     if (
       Number.isFinite(countdownLatestGreenAgeSec) &&
@@ -354,7 +351,7 @@ function startLocalCountdown() {
           nowMs - countdownStartedAtMs
         ) / 1000;
 
-      if (currentGreenAgeSec >= 600) {
+      if (currentGreenAgeSec >= 7200) {
 
         stopCountdownTimer();
 
@@ -370,7 +367,7 @@ function startLocalCountdown() {
 
         if (countdownElements.info) {
           countdownElements.info.textContent =
-            '最新 GREEN 已超過 10 分鐘，請重新記錄轉燈。';
+            '最新 GREEN 已超過 2 小時，請重新記錄轉燈。';
         }
 
         return;
@@ -384,15 +381,10 @@ function startLocalCountdown() {
       ) / 1000;
 
 
-    // =================================================
-    // 一個階段完結
-    // =================================================
-
     if (remainingSec <= 0) {
 
       if (countdownState === 'GREEN') {
 
-        // GREEN 完結 → 進入 RED
         countdownState = 'RED';
 
         countdownEndAtMs =
@@ -401,7 +393,6 @@ function startLocalCountdown() {
 
       } else {
 
-        // RED 完結 → 進入 GREEN
         countdownState = 'GREEN';
 
         countdownEndAtMs =
@@ -454,10 +445,6 @@ async function loadCountdown() {
     );
 
 
-    // =================================================
-    // Worker 表示目前不能倒數
-    // =================================================
-
     if (
       !response.ok ||
       !data.ok ||
@@ -472,10 +459,6 @@ async function loadCountdown() {
     }
 
 
-    // =================================================
-    // 檢查模型資料
-    // =================================================
-
     if (
       !data.model ||
       !Number.isFinite(
@@ -483,6 +466,9 @@ async function loadCountdown() {
       ) ||
       !Number.isFinite(
         Number(data.model.red_average_sec)
+      ) ||
+      !Number.isFinite(
+        Number(data.model.cycle_average_sec)
       ) ||
       !Number.isFinite(
         Number(data.estimated_remaining_sec)
@@ -500,10 +486,6 @@ async function loadCountdown() {
       return;
     }
 
-
-    // =================================================
-    // 保存倒數資料
-    // =================================================
 
     countdownState =
       data.current_state;
@@ -525,8 +507,27 @@ async function loadCountdown() {
       cycle_average_sec:
         Number(
           data.model.cycle_average_sec
+        ),
+
+      fieldCorrectionApplied:
+        Boolean(
+          data.field_correction?.applied
+        ),
+
+      greenCorrectionSec:
+        Number(
+          data.field_correction?.green_actual_sec
         )
     };
+
+    if (
+      !Number.isFinite(
+        countdownModel.greenCorrectionSec
+      )
+    ) {
+      countdownModel.greenCorrectionSec =
+        Number(data.model.green_average_sec);
+    }
 
     countdownLatestGreenAgeSec =
       Number(
@@ -537,20 +538,12 @@ async function loadCountdown() {
       Date.now();
 
 
-    // =================================================
-    // 設定第一次倒數終點
-    // =================================================
-
     countdownEndAtMs =
       Date.now() +
       Number(
         data.estimated_remaining_sec
       ) * 1000;
 
-
-    // =================================================
-    // 顯示 PWA 倒數
-    // =================================================
 
     showCountdownPanel();
 
@@ -571,6 +564,8 @@ async function loadCountdown() {
           data.estimated_remaining_sec,
         model_source:
           data.model_source,
+        field_correction:
+          data.field_correction,
         latest_green_age_sec:
           data.latest_green_age_sec
       }
@@ -794,16 +789,10 @@ signalStateButtons.forEach(
           );
 
 
-          // =================================================
-          // 如果剛剛記錄的是 GREEN
-          // 立即重新取得實驗倒數
-          // =================================================
+          // GREEN / RED 都立即重新取得實驗倒數
+          // RED 事件會觸發 GREEN 現場實測校正
 
-          if (state === 'GREEN') {
-
-            await loadCountdown();
-
-          }
+          await loadCountdown();
 
 
         } catch (error) {
@@ -842,7 +831,7 @@ async function init() {
 
     startGPS();
 
-    // 如果目前有最近 10 分鐘內的 GREEN，
+    // 如果目前有最近 2 小時內的 GREEN，
     // PWA 開啟時可以直接顯示實驗倒數。
     await loadCountdown();
 
