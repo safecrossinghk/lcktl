@@ -383,28 +383,16 @@ function startLocalCountdown() {
 
     if (remainingSec <= 0) {
 
-      if (countdownState === 'GREEN') {
+  console.log(
+    'LSK001 本地倒數完成，重新向 Worker 同步…'
+  );
 
-        countdownState = 'RED';
+  stopCountdownTimer();
 
-        countdownEndAtMs =
-          nowMs +
-          countdownModel.red_average_sec * 1000;
+  loadCountdown();
 
-      } else {
-
-        countdownState = 'GREEN';
-
-        countdownEndAtMs =
-          nowMs +
-          countdownModel.green_average_sec * 1000;
-      }
-
-      remainingSec =
-        (
-          countdownEndAtMs - nowMs
-        ) / 1000;
-    }
+  return;
+}
 
 
     updateCountdownDisplay(remainingSec);
