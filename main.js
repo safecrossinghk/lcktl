@@ -1,869 +1,2107 @@
-const WORKER_API = 'https://lsk001-api.ctakwah.workers.dev';
+// ===================================================
+// 🚦 LSK001 Signal API Worker
+//
+// 核心：
+// 1. /api/roads
+// 2. /api/signal-events
+// 3. /api/signal-cycle
+// 4. /api/signal-model
+// 5. /api/signal-countdown
+//
+// 模型：
+// 「最接近當刻的歷史正常 cycle + 時間距離加權」
+//
+// 即時校正：
+// GREEN → RED 後，立即用實際 GREEN 持續時間
+// 校正下一輪倒數。
+//
+// GREEN Freshness：2 小時
+// ===================================================
 
-const elements = {
-  status: document.querySelector('[data-location-status]'),
-  distance: document.querySelector('[data-distance]'),
-  accuracy: document.querySelector('[data-accuracy]'),
-  signalButton: document.querySelector('[data-signal-button]')
-};
 
-let roads = [];
-let targetRoad = null;
-let latestPosition = null;
+const CORS_HEADERS = Object.freeze({
+  'access-control-allow-origin': '*',
+  'access-control-allow-methods': 'GET, POST, OPTIONS',
+  'access-control-allow-headers': 'content-type'
+});
 
 
 // ===================================================
-// LSK001 實驗倒數 UI
+// 基本設定
 // ===================================================
 
-const countdownElements = {
-  panel: document.querySelector('[data-countdown-panel]'),
-  state: document.querySelector('[data-countdown-state]'),
-  seconds: document.querySelector('[data-countdown-seconds]'),
-  info: document.querySelector('[data-countdown-info]')
-};
-
-let countdownTimer = null;
-let countdownEndAtMs = null;
-let countdownState = null;
-let countdownModel = null;
-let countdownLatestGreenAgeSec = null;
-let countdownStartedAtMs = null;
+const HK_TIME_ZONE = 'Asia/Hong_Kong';
 
 
-// ===================================================
-// 1. 讀取 Worker /api/roads
-// ===================================================
+// 正常 cycle 最長 300 秒
+// 超過視為 OUTLIER
+const MAX_CYCLE_SEC = 300;
 
-async function loadRoads() {
-  const response = await fetch(`${WORKER_API}/api/roads`);
 
-  if (!response.ok) {
-    throw new Error(`道路資料 HTTP ${response.status}`);
-  }
+// 最新 GREEN 最多保留 2 小時
+const MAX_FRESHNESS_SEC = 7200;
 
-  const data = await response.json();
 
-  if (!data.ok || !Array.isArray(data.roads)) {
-    throw new Error('道路資料格式不正確');
-  }
-
-  roads = data.roads;
-
-  if (roads.length === 0) {
-    throw new Error('目前沒有可用道路資料');
-  }
-
-  targetRoad = roads.find(
-    (road) => road.road_id === 'LSK001'
-  ) || roads[0];
-
-  console.log('LSK001 道路資料：', targetRoad);
-
-  return targetRoad;
-}
+// signal-events GET 最多讀取 500 筆
+const MAX_EVENT_LIMIT = 500;
 
 
 // ===================================================
-// 2. 計算兩個 GPS 座標之間的距離
-//    使用 Haversine formula
+// JSON Response
 // ===================================================
 
-function distanceMeters(point1, point2) {
-  const earthRadius = 6371000;
+function json(data, options = {}) {
 
-  const lat1 = point1.latitude * Math.PI / 180;
-  const lat2 = point2.latitude * Math.PI / 180;
+  const headers = new Headers();
 
-  const deltaLat =
-    (point2.latitude - point1.latitude) * Math.PI / 180;
+  headers.set(
+    'content-type',
+    'application/json; charset=utf-8'
+  );
 
-  const deltaLon =
-    (point2.longitude - point1.longitude) * Math.PI / 180;
+  Object.entries(
+    CORS_HEADERS
+  ).forEach(
+    ([key, value]) => {
+      headers.set(key, value);
+    }
+  );
 
-  const a =
-    Math.sin(deltaLat / 2) ** 2 +
-    Math.cos(lat1) *
-    Math.cos(lat2) *
-    Math.sin(deltaLon / 2) ** 2;
+  if (options.headers) {
 
-  const c =
-    2 * Math.atan2(
-      Math.sqrt(a),
-      Math.sqrt(1 - a)
+    Object.entries(
+      options.headers
+    ).forEach(
+      ([key, value]) => {
+        headers.set(key, value);
+      }
     );
-
-  return earthRadius * c;
-}
-
-
-// ===================================================
-// 3. 顯示 GPS 位置 + 100 米範圍判斷
-// ===================================================
-
-function handlePosition(position) {
-  if (!targetRoad) {
-    elements.status.textContent =
-      '尚未取得 LSK001 道路資料。';
-
-    return;
   }
 
-  const latitude = position.coords.latitude;
-  const longitude = position.coords.longitude;
-  const accuracy = position.coords.accuracy;
-
-  latestPosition = {
-    latitude,
-    longitude,
-    accuracy
-  };
-
-  const userPosition = {
-    latitude,
-    longitude
-  };
-
-  const roadPosition = {
-    latitude: targetRoad.latitude,
-    longitude: targetRoad.longitude
-  };
-
-  const distance = distanceMeters(
-    userPosition,
-    roadPosition
-  );
-
-  // 使用 D1 roads 表內的 radius
-  // 目前 LSK001 = 100 米
-  const radius = Number(targetRoad.radius) || 100;
-
-
-  // =================================================
-  // 100 米範圍判斷
-  // =================================================
-
-  if (distance <= radius) {
-
-    elements.status.textContent =
-      `已進入 LSK001 ${radius} 米範圍`;
-
-    // 進入 100 米範圍
-    // 啟用「剛剛轉燈」
-    elements.signalButton.disabled = false;
-
-  } else {
-
-    elements.status.textContent =
-      `尚未進入 LSK001 ${radius} 米範圍`;
-
-    // 超過 100 米
-    // 禁止按「剛剛轉燈」
-    elements.signalButton.disabled = true;
-  }
-
-
-  // 顯示距離，小數 1 位
-  elements.distance.textContent =
-    `${distance.toFixed(1)} 米`;
-
-  // 顯示 GPS 精度
-  elements.accuracy.textContent =
-    `±${Math.round(accuracy)} 米`;
-
-
-  console.log('GPS latitude：', latitude);
-  console.log('GPS longitude：', longitude);
-  console.log('GPS accuracy：', accuracy);
-  console.log('距離 LSK001：', distance.toFixed(1), '米');
-  console.log('LSK001 範圍：', radius, '米');
-
-  console.log(
-    '是否進入範圍：',
-    distance <= radius ? 'YES' : 'NO'
-  );
-}
-
-
-// ===================================================
-// 4. GPS 錯誤處理
-// ===================================================
-
-function handlePositionError(error) {
-  console.error('GPS error：', error);
-
-  if (error.code === 1) {
-
-    elements.status.textContent =
-      'GPS 權限被拒絕，請允許網站使用位置。';
-
-  } else if (error.code === 2) {
-
-    elements.status.textContent =
-      '暫時無法取得 GPS 位置。';
-
-  } else if (error.code === 3) {
-
-    elements.status.textContent =
-      'GPS 定位逾時，請稍後再試。';
-
-  } else {
-
-    elements.status.textContent =
-      '無法取得 GPS 位置。';
-  }
-
-  elements.distance.textContent =
-    '無法計算';
-
-  elements.accuracy.textContent =
-    '無法取得';
-}
-
-
-// ===================================================
-// 5. 開始 GPS
-// ===================================================
-
-function startGPS() {
-  if (!navigator.geolocation) {
-
-    elements.status.textContent =
-      '此裝置不支援 GPS 定位。';
-
-    return;
-  }
-
-  elements.status.textContent =
-    '正在取得 GPS 位置…';
-
-  navigator.geolocation.watchPosition(
-    handlePosition,
-    handlePositionError,
+  return new Response(
+    JSON.stringify(data),
     {
-      enableHighAccuracy: true,
-      maximumAge: 10000,
-      timeout: 15000
+      status:
+        options.status || 200,
+
+      headers
     }
   );
 }
 
 
 // ===================================================
-// 6. 顯示 / 隱藏倒數畫面
+// HK 時間工具
 // ===================================================
 
-function showCountdownPanel() {
-  if (!countdownElements.panel) {
-    return;
-  }
+function getHKDateParts(date = new Date()) {
 
-  countdownElements.panel.hidden = false;
-}
+  const formatter =
+    new Intl.DateTimeFormat(
+      'en-GB',
+      {
+        timeZone:
+          HK_TIME_ZONE,
 
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
 
-function hideCountdownPanel() {
-  if (!countdownElements.panel) {
-    return;
-  }
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
 
-  countdownElements.panel.hidden = true;
-}
-
-
-// ===================================================
-// 7. 停止本地倒數
-// ===================================================
-
-function stopCountdownTimer() {
-  if (countdownTimer !== null) {
-    clearInterval(countdownTimer);
-    countdownTimer = null;
-  }
-
-  countdownEndAtMs = null;
-}
-
-
-// ===================================================
-// 8. 更新 PWA 倒數畫面
-// ===================================================
-
-function updateCountdownDisplay(remainingSec) {
-  if (
-    !countdownElements.state ||
-    !countdownElements.seconds ||
-    !countdownElements.info
-  ) {
-    return;
-  }
-
-  countdownElements.state.textContent =
-    countdownState === 'GREEN'
-      ? '🟢 綠燈'
-      : '🔴 紅燈';
-
-  countdownElements.seconds.textContent =
-    Math.max(0, Math.round(remainingSec));
-
-  countdownElements.info.textContent =
-    '實驗倒數｜資料模型：' +
-    (
-      countdownModel?.source === 'TIME_BUCKET'
-        ? '目前時段'
-        : '整體資料'
+        hourCycle: 'h23'
+      }
     );
+
+  const parts =
+    formatter.formatToParts(date);
+
+  const result = {};
+
+  for (const part of parts) {
+
+    if (part.type !== 'literal') {
+      result[part.type] =
+        Number(part.value);
+    }
+  }
+
+  return result;
+}
+
+
+function getHKMinuteOfDay(date) {
+
+  const parts =
+    getHKDateParts(date);
+
+  return (
+    parts.hour * 60 +
+    parts.minute +
+    parts.second / 60
+  );
+}
+
+
+function getHKTimeString(date) {
+
+  const parts =
+    getHKDateParts(date);
+
+  const pad =
+    (value) =>
+      String(value).padStart(2, '0');
+
+  return (
+    `${parts.year}-${pad(parts.month)}-${pad(parts.day)} ` +
+    `${pad(parts.hour)}:${pad(parts.minute)}:${pad(parts.second)}`
+  );
 }
 
 
 // ===================================================
-// 9. 開始本地每秒倒數
+// 時間段
+//
+// 保留作為資訊顯示。
+// 現在模型不再使用固定時間段作主要選擇。
 // ===================================================
 
-function startLocalCountdown() {
+function getTimeBucket(hour) {
 
-  // 如果之前已有倒數 timer，只停止舊 timer
-  // 但不要清除 countdownEndAtMs
-  if (countdownTimer !== null) {
-    clearInterval(countdownTimer);
-    countdownTimer = null;
+  if (hour < 6) {
+    return '00-06';
   }
 
-  if (
-    !countdownState ||
-    !countdownModel ||
-    !Number.isFinite(countdownEndAtMs)
+  if (hour < 10) {
+    return '06-10';
+  }
+
+  if (hour < 16) {
+    return '10-16';
+  }
+
+  if (hour < 20) {
+    return '16-20';
+  }
+
+  return '20-24';
+}
+
+
+// ===================================================
+// 兩個時間點的「一天內最短距離」
+//
+// 例如：
+// 23:50 → 00:10
+//
+// 不會計成 23 小時 40 分，
+// 而是 20 分鐘。
+// ===================================================
+
+function circularMinuteDistance(
+  minuteA,
+  minuteB
+) {
+
+  const difference =
+    Math.abs(
+      minuteA - minuteB
+    );
+
+  return Math.min(
+    difference,
+    1440 - difference
+  );
+}
+
+
+// ===================================================
+// 時間距離權重
+//
+// 距離 0 小時：1
+// 距離 1 小時：0.5
+// 距離 2 小時：0.333...
+//
+// 越接近當刻，權重越高。
+// ===================================================
+
+function calculateTimeDistanceWeight(
+  distanceHours
+) {
+
+  return (
+    1 /
+    (
+      1 +
+      distanceHours
+    )
+  );
+}
+
+
+// ===================================================
+// 讀取 signal_events
+// ===================================================
+
+async function loadSignalEvents(
+  env,
+  roadId = 'LSK001',
+  limit = MAX_EVENT_LIMIT
+) {
+
+  const result =
+    await env.DB
+      .prepare(`
+        SELECT
+          id,
+          road_id,
+          state,
+          recorded_at,
+          latitude,
+          longitude,
+          accuracy,
+          distance_m,
+          created_at
+        FROM signal_events
+        WHERE road_id = ?
+        ORDER BY recorded_at ASC
+        LIMIT ?
+      `)
+      .bind(
+        roadId,
+        limit
+      )
+      .all();
+
+  return result.results || [];
+}
+
+
+// ===================================================
+// 建立歷史 cycle
+//
+// 只接受立即：
+//
+// GREEN → RED → GREEN
+//
+// 不跨其他事件。
+// ===================================================
+
+function buildCycleAnalysis(
+  events
+) {
+
+  const candidateCycles = [];
+  const normalCycles = [];
+  const outlierCycles = [];
+
+  for (
+    let i = 0;
+    i < events.length - 2;
+    i++
   ) {
-    return;
-  }
 
-  countdownTimer = setInterval(() => {
+    const firstGreen =
+      events[i];
 
-    const nowMs = Date.now();
+    const red =
+      events[i + 1];
 
-    // 最新 GREEN 超過 10 分鐘
-    // 就停止顯示實驗倒數
+    const secondGreen =
+      events[i + 2];
+
+
     if (
-      Number.isFinite(countdownLatestGreenAgeSec) &&
-      Number.isFinite(countdownStartedAtMs)
+      firstGreen.state !== 'GREEN' ||
+      red.state !== 'RED' ||
+      secondGreen.state !== 'GREEN'
+    ) {
+      continue;
+    }
+
+
+    const firstGreenMs =
+      new Date(
+        firstGreen.recorded_at
+      ).getTime();
+
+    const redMs =
+      new Date(
+        red.recorded_at
+      ).getTime();
+
+    const secondGreenMs =
+      new Date(
+        secondGreen.recorded_at
+      ).getTime();
+
+
+    if (
+      !Number.isFinite(firstGreenMs) ||
+      !Number.isFinite(redMs) ||
+      !Number.isFinite(secondGreenMs)
+    ) {
+      continue;
+    }
+
+
+    const greenSec =
+      (
+        redMs -
+        firstGreenMs
+      ) / 1000;
+
+
+    const redSec =
+      (
+        secondGreenMs -
+        redMs
+      ) / 1000;
+
+
+    const cycleSec =
+      (
+        secondGreenMs -
+        firstGreenMs
+      ) / 1000;
+
+
+    if (
+      greenSec <= 0 ||
+      redSec <= 0 ||
+      cycleSec <= 0
+    ) {
+      continue;
+    }
+
+
+    const cycleParts =
+      getHKDateParts(
+        new Date(firstGreenMs)
+      );
+
+
+    const greenStartMinute =
+      cycleParts.hour * 60 +
+      cycleParts.minute +
+      cycleParts.second / 60;
+
+
+    const cycle = {
+
+      green_event_id:
+        firstGreen.id,
+
+      red_event_id:
+        red.id,
+
+      next_green_event_id:
+        secondGreen.id,
+
+      green_recorded_at:
+        firstGreen.recorded_at,
+
+      red_recorded_at:
+        red.recorded_at,
+
+      next_green_recorded_at:
+        secondGreen.recorded_at,
+
+      green_sec:
+        greenSec,
+
+      red_sec:
+        redSec,
+
+      cycle_sec:
+        cycleSec,
+
+      green_start_minute:
+        greenStartMinute,
+
+      green_start_hour:
+        greenStartMinute / 60
+    };
+
+
+    candidateCycles.push(
+      cycle
+    );
+
+
+    if (
+      cycleSec >
+      MAX_CYCLE_SEC
     ) {
 
-      const currentGreenAgeSec =
-        countdownLatestGreenAgeSec +
-        (
-          nowMs - countdownStartedAtMs
-        ) / 1000;
+      outlierCycles.push(
+        cycle
+      );
 
-      if (currentGreenAgeSec >= 600) {
+    } else {
 
-        stopCountdownTimer();
+      normalCycles.push(
+        cycle
+      );
+    }
+  }
 
-        if (countdownElements.state) {
-          countdownElements.state.textContent =
-            '等待新的轉燈資料';
-        }
 
-        if (countdownElements.seconds) {
-          countdownElements.seconds.textContent =
-            '--';
-        }
+  return {
+    candidateCycles,
+    normalCycles,
+    outlierCycles
+  };
+}
 
-        if (countdownElements.info) {
-          countdownElements.info.textContent =
-            '最新 GREEN 已超過 10 分鐘，請重新記錄轉燈。';
-        }
 
-        return;
+// ===================================================
+// 建立「最接近當刻 + 時間距離加權」模型
+// ===================================================
+
+function buildTimeDistanceWeightedModel(
+  normalCycles,
+  now = new Date()
+) {
+
+  if (
+    !Array.isArray(normalCycles) ||
+    normalCycles.length === 0
+  ) {
+
+    return null;
+  }
+
+
+  const currentMinute =
+    getHKMinuteOfDay(now);
+
+
+  const weightedCycles =
+    normalCycles.map(
+      (cycle) => {
+
+        const distanceMinutes =
+          circularMinuteDistance(
+            currentMinute,
+            cycle.green_start_minute
+          );
+
+
+        const distanceHours =
+          distanceMinutes / 60;
+
+
+        const weight =
+          calculateTimeDistanceWeight(
+            distanceHours
+          );
+
+
+        return {
+
+          ...cycle,
+
+          time_distance_minutes:
+            distanceMinutes,
+
+          time_distance_hours:
+            distanceHours,
+
+          weight
+        };
       }
+    );
+
+
+  let totalWeight = 0;
+
+  let weightedGreen = 0;
+  let weightedRed = 0;
+  let weightedCycle = 0;
+
+
+  for (
+    const cycle of weightedCycles
+  ) {
+
+    totalWeight +=
+      cycle.weight;
+
+
+    weightedGreen +=
+      cycle.green_sec *
+      cycle.weight;
+
+
+    weightedRed +=
+      cycle.red_sec *
+      cycle.weight;
+
+
+    weightedCycle +=
+      cycle.cycle_sec *
+      cycle.weight;
+  }
+
+
+  if (
+    totalWeight <= 0
+  ) {
+
+    return null;
+  }
+
+
+  const greenAverageSec =
+    weightedGreen /
+    totalWeight;
+
+
+  const redAverageSec =
+    weightedRed /
+    totalWeight;
+
+
+  const cycleAverageSec =
+    weightedCycle /
+    totalWeight;
+
+
+  // 找出最接近當刻的歷史正常 cycle
+  const nearestCycle =
+    [...weightedCycles]
+      .sort(
+        (a, b) => {
+
+          if (
+            a.time_distance_minutes !==
+            b.time_distance_minutes
+          ) {
+
+            return (
+              a.time_distance_minutes -
+              b.time_distance_minutes
+            );
+          }
+
+          return (
+            new Date(
+              b.green_recorded_at
+            ).getTime() -
+            new Date(
+              a.green_recorded_at
+            ).getTime()
+          );
+        }
+      )[0];
+
+
+  return {
+
+    model_source:
+      'TIME_DISTANCE_WEIGHTED',
+
+    model_count:
+      normalCycles.length,
+
+    total_weight:
+      totalWeight,
+
+    green_average_sec:
+      greenAverageSec,
+
+    red_average_sec:
+      redAverageSec,
+
+    cycle_average_sec:
+      cycleAverageSec,
+
+    nearest_cycle:
+      nearestCycle,
+
+    weighted_cycles:
+      weightedCycles
+  };
+}
+
+
+// ===================================================
+// /api/health
+// ===================================================
+
+async function handleHealth() {
+
+  return json({
+    ok: true,
+    service: 'lsk001-api',
+    version: '1.0.0'
+  });
+}
+
+
+// ===================================================
+// /api/roads
+// ===================================================
+
+async function handleRoads(
+  env
+) {
+
+  try {
+
+    const result =
+      await env.DB
+        .prepare(`
+          SELECT
+            id,
+            road_id,
+            name,
+            latitude,
+            longitude,
+            radius,
+            enabled,
+            created_at,
+            updated_at
+          FROM roads
+          WHERE enabled = 1
+          ORDER BY id ASC
+        `)
+        .all();
+
+
+    return json({
+      ok: true,
+      roads:
+        result.results || []
+    });
+
+  } catch (error) {
+
+    console.error(
+      'D1 roads query error:',
+      error
+    );
+
+
+    return json({
+      ok: false,
+      error:
+        'D1 roads query failed',
+
+      message:
+        error.message
+
+    }, {
+      status: 500
+    });
+  }
+}
+
+
+// ===================================================
+// POST /api/signal-events
+// ===================================================
+
+async function handleSignalEventPost(
+  request,
+  env
+) {
+
+  try {
+
+    const body =
+      await request.json();
+
+
+    const roadId =
+      String(
+        body.road_id || ''
+      ).trim();
+
+
+    const state =
+      String(
+        body.state || ''
+      ).trim().toUpperCase();
+
+
+    const latitude =
+      Number(
+        body.latitude
+      );
+
+
+    const longitude =
+      Number(
+        body.longitude
+      );
+
+
+    const accuracy =
+      Number(
+        body.accuracy
+      );
+
+
+    const distanceM =
+      Number(
+        body.distance_m
+      );
+
+
+    if (!roadId) {
+
+      return json({
+        ok: false,
+        error:
+          'road_id is required'
+      }, {
+        status: 400
+      });
     }
 
 
-    let remainingSec =
+    if (
+      state !== 'GREEN' &&
+      state !== 'RED'
+    ) {
+
+      return json({
+        ok: false,
+        error:
+          'state must be GREEN or RED'
+      }, {
+        status: 400
+      });
+    }
+
+
+    if (
+      !Number.isFinite(latitude) ||
+      !Number.isFinite(longitude) ||
+      !Number.isFinite(accuracy) ||
+      !Number.isFinite(distanceM)
+    ) {
+
+      return json({
+        ok: false,
+        error:
+          'latitude, longitude, accuracy and distance_m must be finite numbers'
+      }, {
+        status: 400
+      });
+    }
+
+
+    const recordedAt =
+      new Date().toISOString();
+
+
+    const result =
+      await env.DB
+        .prepare(`
+          INSERT INTO signal_events (
+            road_id,
+            state,
+            recorded_at,
+            latitude,
+            longitude,
+            accuracy,
+            distance_m
+          )
+          VALUES (?, ?, ?, ?, ?, ?, ?)
+        `)
+        .bind(
+          roadId,
+          state,
+          recordedAt,
+          latitude,
+          longitude,
+          accuracy,
+          distanceM
+        )
+        .run();
+
+
+    const eventId =
+      result.meta?.last_row_id;
+
+
+    return json({
+      ok: true,
+
+      event: {
+        id:
+          eventId,
+
+        road_id:
+          roadId,
+
+        state,
+
+        recorded_at:
+          recordedAt,
+
+        latitude,
+
+        longitude,
+
+        accuracy,
+
+        distance_m:
+          distanceM
+      },
+
+      result
+    });
+
+
+  } catch (error) {
+
+    console.error(
+      'D1 signal event insert error:',
+      error
+    );
+
+
+    return json({
+      ok: false,
+
+      error:
+        'D1 signal event insert failed',
+
+      message:
+        error.message
+
+    }, {
+      status: 500
+    });
+  }
+}
+
+
+// ===================================================
+// GET /api/signal-events
+// ===================================================
+
+async function handleSignalEventsGet(
+  request,
+  env
+) {
+
+  try {
+
+    const url =
+      new URL(request.url);
+
+
+    const roadId =
+      String(
+        url.searchParams.get(
+          'road_id'
+        ) || 'LSK001'
+      ).trim();
+
+
+    const limitRaw =
+      Number(
+        url.searchParams.get(
+          'limit'
+        ) || 100
+      );
+
+
+    const limit =
+      Math.min(
+        Math.max(
+          Number.isFinite(
+            limitRaw
+          )
+            ? Math.floor(
+                limitRaw
+              )
+            : 100,
+          1
+        ),
+        MAX_EVENT_LIMIT
+      );
+
+
+    const events =
+      await loadSignalEvents(
+        env,
+        roadId,
+        limit
+      );
+
+
+    return json({
+      ok: true,
+
+      road_id:
+        roadId,
+
+      count:
+        events.length,
+
+      events
+    });
+
+
+  } catch (error) {
+
+    console.error(
+      'D1 signal event query error:',
+      error
+    );
+
+
+    return json({
+      ok: false,
+
+      error:
+        'D1 signal event query failed',
+
+      message:
+        error.message
+
+    }, {
+      status: 500
+    });
+  }
+}
+
+
+// ===================================================
+// GET /api/signal-cycle
+// ===================================================
+
+async function handleSignalCycle(
+  request,
+  env
+) {
+
+  try {
+
+    const url =
+      new URL(request.url);
+
+
+    const roadId =
+      String(
+        url.searchParams.get(
+          'road_id'
+        ) || 'LSK001'
+      ).trim();
+
+
+    const events =
+      await loadSignalEvents(
+        env,
+        roadId,
+        MAX_EVENT_LIMIT
+      );
+
+
+    const analysis =
+      buildCycleAnalysis(
+        events
+      );
+
+
+    const normalCycles =
+      analysis.normalCycles;
+
+
+    let overallGreen = null;
+    let overallRed = null;
+    let overallCycle = null;
+
+
+    if (
+      normalCycles.length > 0
+    ) {
+
+      overallGreen =
+        normalCycles.reduce(
+          (sum, cycle) =>
+            sum + cycle.green_sec,
+          0
+        ) /
+        normalCycles.length;
+
+
+      overallRed =
+        normalCycles.reduce(
+          (sum, cycle) =>
+            sum + cycle.red_sec,
+          0
+        ) /
+        normalCycles.length;
+
+
+      overallCycle =
+        normalCycles.reduce(
+          (sum, cycle) =>
+            sum + cycle.cycle_sec,
+          0
+        ) /
+        normalCycles.length;
+    }
+
+
+    return json({
+
+      ok: true,
+
+      road_id:
+        roadId,
+
+      max_cycle_sec:
+        MAX_CYCLE_SEC,
+
+      candidate_count:
+        analysis.candidateCycles.length,
+
+      normal_count:
+        analysis.normalCycles.length,
+
+      outlier_count:
+        analysis.outlierCycles.length,
+
+      overall: {
+
+        green_average_sec:
+          overallGreen,
+
+        red_average_sec:
+          overallRed,
+
+        cycle_average_sec:
+          overallCycle
+      },
+
+      normal_cycles:
+        analysis.normalCycles,
+
+      outlier_cycles:
+        analysis.outlierCycles
+    });
+
+
+  } catch (error) {
+
+    console.error(
+      'signal-cycle error:',
+      error
+    );
+
+
+    return json({
+      ok: false,
+
+      error:
+        'signal-cycle failed',
+
+      message:
+        error.message
+
+    }, {
+      status: 500
+    });
+  }
+}
+
+
+// ===================================================
+// GET /api/signal-model
+//
+// 新模型：
+//
+// 最接近當刻的歷史正常 cycle
+// +
+// 時間距離加權
+// ===================================================
+
+async function handleSignalModel(
+  request,
+  env
+) {
+
+  try {
+
+    const url =
+      new URL(request.url);
+
+
+    const roadId =
+      String(
+        url.searchParams.get(
+          'road_id'
+        ) || 'LSK001'
+      ).trim();
+
+
+    const now =
+      new Date();
+
+
+    const hkParts =
+      getHKDateParts(
+        now
+      );
+
+
+    const currentHongKongTime =
+      getHKTimeString(
+        now
+      );
+
+
+    const currentTimeBucket =
+      getTimeBucket(
+        hkParts.hour
+      );
+
+
+    const events =
+      await loadSignalEvents(
+        env,
+        roadId,
+        MAX_EVENT_LIMIT
+      );
+
+
+    const analysis =
+      buildCycleAnalysis(
+        events
+      );
+
+
+    const model =
+      buildTimeDistanceWeightedModel(
+        analysis.normalCycles,
+        now
+      );
+
+
+    if (!model) {
+
+      return json({
+
+        ok: true,
+
+        road_id:
+          roadId,
+
+        timezone:
+          HK_TIME_ZONE,
+
+        experimental:
+          true,
+
+        current_hong_kong_time:
+          currentHongKongTime,
+
+        current_hong_kong_hour:
+          hkParts.hour,
+
+        current_time_bucket:
+          currentTimeBucket,
+
+        model_available:
+          false,
+
+        model_source:
+          null,
+
+        model_count:
+          0,
+
+        model:
+          null,
+
+        historical_data_note:
+          '目前沒有足夠的正常 GREEN→RED→GREEN cycle。'
+      });
+    }
+
+
+    return json({
+
+      ok: true,
+
+      road_id:
+        roadId,
+
+      timezone:
+        HK_TIME_ZONE,
+
+      experimental:
+        true,
+
+      current_hong_kong_time:
+        currentHongKongTime,
+
+      current_hong_kong_hour:
+        hkParts.hour,
+
+      current_time_bucket:
+        currentTimeBucket,
+
+      model_available:
+        true,
+
+      model_source:
+        model.model_source,
+
+      model_count:
+        model.model_count,
+
+      model: {
+
+        green_average_sec:
+          model.green_average_sec,
+
+        red_average_sec:
+          model.red_average_sec,
+
+        cycle_average_sec:
+          model.cycle_average_sec
+      },
+
+      weighting: {
+
+        method:
+          '1 / (1 + time_distance_hours)',
+
+        description:
+          '歷史正常 cycle 距離當刻越近，權重越高。',
+
+        total_weight:
+          model.total_weight
+      },
+
+      nearest_cycle:
+        model.nearest_cycle,
+
+      historical_data_note:
+        '歷史資料保留；模型使用正常 GREEN→RED→GREEN cycle，並按時間距離加權。'
+    });
+
+
+  } catch (error) {
+
+    console.error(
+      'signal-model error:',
+      error
+    );
+
+
+    return json({
+
+      ok: false,
+
+      error:
+        'signal-model failed',
+
+      message:
+        error.message
+
+    }, {
+      status: 500
+    });
+  }
+}
+
+
+// ===================================================
+// GET /api/signal-countdown
+//
+// 主要流程：
+//
+// 1. 找最新 GREEN
+// 2. Freshness ≤ 2 小時
+// 3. 建立時間距離加權模型
+// 4. 如果最新 RED 在最新 GREEN 後面
+//    → 計算實際 GREEN
+// 5. 即時校正 GREEN
+// 6. 開始 countdown
+// ===================================================
+
+async function handleSignalCountdown(
+  request,
+  env
+) {
+
+  try {
+
+    const url =
+      new URL(request.url);
+
+
+    const roadId =
+      String(
+        url.searchParams.get(
+          'road_id'
+        ) || 'LSK001'
+      ).trim();
+
+
+    const now =
+      new Date();
+
+
+    const hkParts =
+      getHKDateParts(
+        now
+      );
+
+
+    const currentHongKongTime =
+      getHKTimeString(
+        now
+      );
+
+
+    const currentTimeBucket =
+      getTimeBucket(
+        hkParts.hour
+      );
+
+
+    const events =
+      await loadSignalEvents(
+        env,
+        roadId,
+        MAX_EVENT_LIMIT
+      );
+
+
+    if (
+      events.length === 0
+    ) {
+
+      return json({
+
+        ok: true,
+
+        road_id:
+          roadId,
+
+        timezone:
+          HK_TIME_ZONE,
+
+        experimental:
+          true,
+
+        current_hong_kong_time:
+          currentHongKongTime,
+
+        current_hong_kong_hour:
+          hkParts.hour,
+
+        current_time_bucket:
+          currentTimeBucket,
+
+        countdown_available:
+          false,
+
+        available:
+          false,
+
+        reason:
+          '目前沒有任何 signal event。'
+      });
+    }
+
+
+    // =================================================
+    // 最新 GREEN
+    // =================================================
+
+    const latestGreen =
+      [...events]
+        .reverse()
+        .find(
+          (event) =>
+            event.state === 'GREEN'
+        );
+
+
+    if (!latestGreen) {
+
+      return json({
+
+        ok: true,
+
+        road_id:
+          roadId,
+
+        timezone:
+          HK_TIME_ZONE,
+
+        experimental:
+          true,
+
+        current_hong_kong_time:
+          currentHongKongTime,
+
+        current_hong_kong_hour:
+          hkParts.hour,
+
+        current_time_bucket:
+          currentTimeBucket,
+
+        countdown_available:
+          false,
+
+        available:
+          false,
+
+        reason:
+          '目前沒有 GREEN 事件。'
+      });
+    }
+
+
+    const latestGreenMs =
+      new Date(
+        latestGreen.recorded_at
+      ).getTime();
+
+
+    if (
+      !Number.isFinite(
+        latestGreenMs
+      )
+    ) {
+
+      return json({
+
+        ok: true,
+
+        road_id:
+          roadId,
+
+        countdown_available:
+          false,
+
+        available:
+          false,
+
+        reason:
+          '最新 GREEN timestamp 無效。'
+      });
+    }
+
+
+    const latestGreenAgeSec =
       (
-        countdownEndAtMs - nowMs
+        Date.now() -
+        latestGreenMs
       ) / 1000;
 
 
     // =================================================
-    // 一個階段完結
-    // =================================================
-
-    if (remainingSec <= 0) {
-
-      if (countdownState === 'GREEN') {
-
-        // GREEN 完結 → 進入 RED
-        countdownState = 'RED';
-
-        countdownEndAtMs =
-          nowMs +
-          countdownModel.red_average_sec * 1000;
-
-      } else {
-
-        // RED 完結 → 進入 GREEN
-        countdownState = 'GREEN';
-
-        countdownEndAtMs =
-          nowMs +
-          countdownModel.green_average_sec * 1000;
-      }
-
-      remainingSec =
-        (
-          countdownEndAtMs - nowMs
-        ) / 1000;
-    }
-
-
-    updateCountdownDisplay(remainingSec);
-
-  }, 250);
-}
-
-
-// ===================================================
-// 10. 呼叫 Worker /api/signal-countdown
-// ===================================================
-
-async function loadCountdown() {
-
-  if (!countdownElements.panel) {
-    console.warn(
-      '找不到 countdown-panel，請確認 index.html 已加入倒數區域。'
-    );
-
-    return;
-  }
-
-  try {
-
-    console.log(
-      '正在取得 LSK001 signal countdown…'
-    );
-
-    const response = await fetch(
-      `${WORKER_API}/api/signal-countdown?road_id=LSK001`
-    );
-
-    const data = await response.json();
-
-    console.log(
-      'LSK001 countdown API：',
-      data
-    );
-
-
-    // =================================================
-    // Worker 表示目前不能倒數
+    // GREEN Freshness
+    //
+    // 現在 = 2 小時
     // =================================================
 
     if (
-      !response.ok ||
-      !data.ok ||
-      !data.countdown_available ||
-      !data.available
+      latestGreenAgeSec < 0 ||
+      latestGreenAgeSec >
+        MAX_FRESHNESS_SEC
     ) {
 
-      stopCountdownTimer();
-      hideCountdownPanel();
+      return json({
 
-      return;
-    }
+        ok: true,
 
+        road_id:
+          roadId,
 
-    // =================================================
-    // 檢查模型資料
-    // =================================================
+        timezone:
+          HK_TIME_ZONE,
 
-    if (
-      !data.model ||
-      !Number.isFinite(
-        Number(data.model.green_average_sec)
-      ) ||
-      !Number.isFinite(
-        Number(data.model.red_average_sec)
-      ) ||
-      !Number.isFinite(
-        Number(data.estimated_remaining_sec)
-      )
-    ) {
+        experimental:
+          true,
 
-      console.error(
-        'Countdown API 資料不足：',
-        data
-      );
+        current_hong_kong_time:
+          currentHongKongTime,
 
-      stopCountdownTimer();
-      hideCountdownPanel();
+        current_hong_kong_hour:
+          hkParts.hour,
 
-      return;
-    }
+        current_time_bucket:
+          currentTimeBucket,
 
+        countdown_available:
+          false,
 
-    // =================================================
-    // 保存倒數資料
-    // =================================================
+        available:
+          false,
 
-    countdownState =
-      data.current_state;
+        reason:
+          '最新 GREEN 事件已經太舊，請在現場重新記錄轉燈。',
 
-    countdownModel = {
-      source:
-        data.model_source,
+        latest_green_event:
+          latestGreen,
 
-      green_average_sec:
-        Number(
-          data.model.green_average_sec
-        ),
-
-      red_average_sec:
-        Number(
-          data.model.red_average_sec
-        ),
-
-      cycle_average_sec:
-        Number(
-          data.model.cycle_average_sec
-        )
-    };
-
-    countdownLatestGreenAgeSec =
-      Number(
-        data.latest_green_age_sec
-      );
-
-    countdownStartedAtMs =
-      Date.now();
-
-
-    // =================================================
-    // 設定第一次倒數終點
-    // =================================================
-
-    countdownEndAtMs =
-      Date.now() +
-      Number(
-        data.estimated_remaining_sec
-      ) * 1000;
-
-
-    // =================================================
-    // 顯示 PWA 倒數
-    // =================================================
-
-    showCountdownPanel();
-
-    updateCountdownDisplay(
-      Number(
-        data.estimated_remaining_sec
-      )
-    );
-
-    startLocalCountdown();
-
-
-    console.log(
-      'LSK001 實驗倒數已開始：',
-      {
-        state: countdownState,
-        remaining:
-          data.estimated_remaining_sec,
-        model_source:
-          data.model_source,
         latest_green_age_sec:
-          data.latest_green_age_sec
-      }
-    );
+          latestGreenAgeSec,
 
-  } catch (error) {
+        max_freshness_sec:
+          MAX_FRESHNESS_SEC,
 
-    console.error(
-      '取得 LSK001 countdown 失敗：',
-      error
-    );
-
-    stopCountdownTimer();
-    hideCountdownPanel();
-  }
-}
-
-
-// ===================================================
-// 11. 記錄 GREEN / RED 訊號事件
-// ===================================================
-
-const signalChoice = document.querySelector(
-  '[data-signal-choice]'
-);
-
-const signalResult = document.querySelector(
-  '[data-signal-result]'
-);
-
-const signalStateButtons = document.querySelectorAll(
-  '[data-signal-state]'
-);
-
-
-// ===================================================
-// 「剛剛轉燈」按鈕
-// ===================================================
-
-elements.signalButton.addEventListener(
-  'click',
-  () => {
-
-    if (!latestPosition || !targetRoad) {
-
-      signalResult.textContent =
-        '尚未取得 GPS 位置。';
-
-      signalChoice.hidden = false;
-
-      return;
+        historical_data_note:
+          '歷史事件仍然保留，並繼續用於模型計算。'
+      });
     }
 
 
-    const roadPosition = {
-      latitude: targetRoad.latitude,
-      longitude: targetRoad.longitude
-    };
+    // =================================================
+    // 最新 RED
+    // =================================================
 
-    const userPosition = {
-      latitude: latestPosition.latitude,
-      longitude: latestPosition.longitude
-    };
-
-    const distance = distanceMeters(
-      userPosition,
-      roadPosition
-    );
-
-    const radius =
-      Number(targetRoad.radius) || 100;
-
-
-    if (distance > radius) {
-
-      signalResult.textContent =
-        `目前距離 LSK001 ${distance.toFixed(1)} 米，超過 ${radius} 米範圍。`;
-
-      signalChoice.hidden = false;
-
-      return;
-    }
-
-
-    signalResult.textContent =
-      '請選擇剛才的燈號。';
-
-    signalChoice.hidden = false;
-  }
-);
-
-
-// ===================================================
-// GREEN / RED 選擇
-// ===================================================
-
-signalStateButtons.forEach(
-  (button) => {
-
-    button.addEventListener(
-      'click',
-      async () => {
-
-        if (!latestPosition || !targetRoad) {
-
-          signalResult.textContent =
-            '尚未取得 GPS 位置。';
-
-          return;
-        }
-
-
-        const state =
-          button.dataset.signalState;
-
-
-        const roadPosition = {
-          latitude: targetRoad.latitude,
-          longitude: targetRoad.longitude
-        };
-
-        const userPosition = {
-          latitude: latestPosition.latitude,
-          longitude: latestPosition.longitude
-        };
-
-
-        const distance =
-          distanceMeters(
-            userPosition,
-            roadPosition
-          );
-
-
-        const radius =
-          Number(targetRoad.radius) || 100;
-
-
-        if (distance > radius) {
-
-          signalResult.textContent =
-            `目前距離 ${distance.toFixed(1)} 米，已超出 ${radius} 米範圍。`;
-
-          return;
-        }
-
-
-        signalStateButtons.forEach(
-          (item) => {
-            item.disabled = true;
-          }
+    const latestRed =
+      [...events]
+        .reverse()
+        .find(
+          (event) =>
+            event.state === 'RED'
         );
 
 
-        signalResult.textContent =
-          `正在記錄 ${state === 'GREEN' ? '🟢 轉綠' : '🔴 轉紅'}…`;
+    // =================================================
+    // 即時現場 GREEN 校正
+    //
+    // 如果最新 RED 在最新 GREEN 後面：
+    //
+    // RED - GREEN = 實際 GREEN 時間
+    // =================================================
+
+    let fieldCorrectionGreenSec =
+      null;
+
+    let fieldCorrectionEventId =
+      null;
 
 
-        try {
+    if (latestRed) {
 
-          const response = await fetch(
-            `${WORKER_API}/api/signal-events`,
-            {
-              method: 'POST',
-
-              headers: {
-                'Content-Type':
-                  'application/json'
-              },
-
-              body: JSON.stringify({
-                road_id:
-                  targetRoad.road_id,
-
-                state,
-
-                latitude:
-                  latestPosition.latitude,
-
-                longitude:
-                  latestPosition.longitude,
-
-                accuracy:
-                  latestPosition.accuracy,
-
-                distance_m:
-                  distance
-              })
-            }
-          );
+      const latestRedMs =
+        new Date(
+          latestRed.recorded_at
+        ).getTime();
 
 
-          const data =
-            await response.json();
+      if (
+        Number.isFinite(
+          latestRedMs
+        ) &&
+        latestRedMs >
+          latestGreenMs
+      ) {
+
+        const actualGreenSec =
+          (
+            latestRedMs -
+            latestGreenMs
+          ) / 1000;
 
 
-          if (!response.ok || !data.ok) {
+        if (
+          actualGreenSec > 0 &&
+          actualGreenSec <=
+            MAX_CYCLE_SEC
+        ) {
 
-            throw new Error(
-              data.message ||
-              data.error ||
-              `HTTP ${response.status}`
-            );
-          }
+          fieldCorrectionGreenSec =
+            actualGreenSec;
 
-
-          signalResult.textContent =
-            `✅ 已記錄 ${state === 'GREEN' ? '🟢 轉綠' : '🔴 轉紅'}（事件 ID：${data.event.id}）`;
-
-
-          console.log(
-            '訊號事件已記錄：',
-            data.event
-          );
-
-
-          signalStateButtons.forEach(
-            (item) => {
-              item.disabled = false;
-            }
-          );
-
-
-          // =================================================
-          // 如果剛剛記錄的是 GREEN
-          // 立即重新取得實驗倒數
-          // =================================================
-
-          if (state === 'GREEN') {
-
-            await loadCountdown();
-
-          }
-
-
-        } catch (error) {
-
-          console.error(
-            '訊號事件記錄失敗：',
-            error
-          );
-
-
-          signalResult.textContent =
-            `❌ 記錄失敗：${error.message}`;
-
-
-          signalStateButtons.forEach(
-            (item) => {
-              item.disabled = false;
-            }
-          );
+          fieldCorrectionEventId =
+            latestRed.id;
         }
       }
-    );
-  }
-);
+    }
 
 
-// ===================================================
-// 12. 初始化
-// ===================================================
+    const fieldCorrectionApplied =
+      Number.isFinite(
+        fieldCorrectionGreenSec
+      );
 
-async function init() {
 
-  try {
+    // =================================================
+    // 建立新的
+    //
+    // 「最接近當刻 + 時間距離加權」
+    //
+    // 模型
+    // =================================================
 
-    await loadRoads();
+    const analysis =
+      buildCycleAnalysis(
+        events
+      );
 
-    startGPS();
 
-    // 如果目前有最近 10 分鐘內的 GREEN，
-    // PWA 開啟時可以直接顯示實驗倒數。
-    await loadCountdown();
+    const model =
+      buildTimeDistanceWeightedModel(
+        analysis.normalCycles,
+        now
+      );
+
+
+    if (!model) {
+
+      return json({
+
+        ok: true,
+
+        road_id:
+          roadId,
+
+        timezone:
+          HK_TIME_ZONE,
+
+        experimental:
+          true,
+
+        current_hong_kong_time:
+          currentHongKongTime,
+
+        current_hong_kong_hour:
+          hkParts.hour,
+
+        current_time_bucket:
+          currentTimeBucket,
+
+        countdown_available:
+          false,
+
+        available:
+          false,
+
+        reason:
+          '目前沒有足夠的歷史正常 cycle。',
+
+        latest_green_event:
+          latestGreen,
+
+        latest_green_age_sec:
+          latestGreenAgeSec,
+
+        max_freshness_sec:
+          MAX_FRESHNESS_SEC,
+
+        field_correction: {
+
+          applied:
+            fieldCorrectionApplied,
+
+          green_actual_sec:
+            fieldCorrectionApplied
+              ? Number(
+                  fieldCorrectionGreenSec.toFixed(3)
+                )
+              : null,
+
+          red_event_id:
+            fieldCorrectionApplied
+              ? fieldCorrectionEventId
+              : null
+        }
+      });
+    }
+
+
+    // =================================================
+    // 原始時間距離加權模型
+    // =================================================
+
+    let greenAverageSec =
+      model.green_average_sec;
+
+    const redAverageSec =
+      model.red_average_sec;
+
+    let cycleAverageSec =
+      model.cycle_average_sec;
+
+
+    // =================================================
+    // 套用即時現場校正
+    //
+    // GREEN：
+    // 歷史加權模型 → 實際現場時間
+    //
+    // RED：
+    // 暫時仍使用歷史加權模型
+    // =================================================
+
+    if (
+      fieldCorrectionApplied
+    ) {
+
+      greenAverageSec =
+        fieldCorrectionGreenSec;
+
+      cycleAverageSec =
+        greenAverageSec +
+        redAverageSec;
+    }
+
+
+    // =================================================
+    // 最新 GREEN 到現在經過多久
+    // =================================================
+
+    const elapsedSec =
+      latestGreenAgeSec;
+
+
+    // =================================================
+    // 計算目前位於 cycle 哪個位置
+    // =================================================
+
+    const phaseElapsedSec =
+      elapsedSec %
+      cycleAverageSec;
+
+
+    let currentState;
+    let estimatedRemainingSec;
+
+
+    if (
+      phaseElapsedSec <
+      greenAverageSec
+    ) {
+
+      currentState =
+        'GREEN';
+
+
+      estimatedRemainingSec =
+        greenAverageSec -
+        phaseElapsedSec;
+
+    } else {
+
+      currentState =
+        'RED';
+
+
+      estimatedRemainingSec =
+        cycleAverageSec -
+        phaseElapsedSec;
+    }
+
+
+    return json({
+
+      ok: true,
+
+      road_id:
+        roadId,
+
+      timezone:
+        HK_TIME_ZONE,
+
+      experimental:
+        true,
+
+      current_hong_kong_time:
+        currentHongKongTime,
+
+      current_hong_kong_hour:
+        hkParts.hour,
+
+      current_time_bucket:
+        currentTimeBucket,
+
+
+      countdown_available:
+        true,
+
+      available:
+        true,
+
+
+      model_source:
+        model.model_source,
+
+
+      model_count:
+        model.model_count,
+
+
+      model: {
+
+        green_average_sec:
+          greenAverageSec,
+
+        red_average_sec:
+          redAverageSec,
+
+        cycle_average_sec:
+          cycleAverageSec
+      },
+
+
+      weighting: {
+
+        method:
+          '1 / (1 + time_distance_hours)',
+
+        total_weight:
+          model.total_weight,
+
+        nearest_cycle:
+          model.nearest_cycle
+      },
+
+
+      field_correction: {
+
+        applied:
+          fieldCorrectionApplied,
+
+        green_actual_sec:
+          fieldCorrectionApplied
+            ? Number(
+                fieldCorrectionGreenSec.toFixed(3)
+              )
+            : null,
+
+        red_event_id:
+          fieldCorrectionApplied
+            ? fieldCorrectionEventId
+            : null
+      },
+
+
+      latest_green_event:
+        latestGreen,
+
+
+      latest_green_age_sec:
+        latestGreenAgeSec,
+
+
+      max_freshness_sec:
+        MAX_FRESHNESS_SEC,
+
+
+      elapsed_since_green_sec:
+        elapsedSec,
+
+
+      phase_elapsed_sec:
+        phaseElapsedSec,
+
+
+      current_state:
+        currentState,
+
+
+      estimated_remaining_sec:
+        estimatedRemainingSec,
+
+
+      historical_data_note:
+        '歷史事件保留；模型使用正常 cycle 並按時間距離加權。'
+    });
+
 
   } catch (error) {
 
     console.error(
-      'LSK001 初始化失敗：',
+      'signal-countdown error:',
       error
     );
 
 
-    elements.status.textContent =
-      '無法取得 LSK001 道路資料。';
+    return json({
 
-    elements.distance.textContent =
-      '無法計算';
+      ok: false,
 
-    elements.accuracy.textContent =
-      '無法取得';
+      error:
+        'signal-countdown failed',
+
+      message:
+        error.message
+
+    }, {
+      status: 500
+    });
   }
 }
 
 
-init();
+// ===================================================
+// Worker 主入口
+// ===================================================
+
+export default {
+
+  async fetch(
+    request,
+    env,
+    ctx
+  ) {
+
+    const url =
+      new URL(request.url);
+
+
+    // =================================================
+    // CORS OPTIONS
+    // =================================================
+
+    if (
+      request.method === 'OPTIONS'
+    ) {
+
+      return new Response(
+        null,
+        {
+          status: 204,
+          headers:
+            CORS_HEADERS
+        }
+      );
+    }
+
+
+    // =================================================
+    // HEALTH
+    // =================================================
+
+    if (
+      request.method === 'GET' &&
+      url.pathname === '/api/health'
+    ) {
+
+      return handleHealth();
+    }
+
+
+    // =================================================
+    // ROADS
+    // =================================================
+
+    if (
+      request.method === 'GET' &&
+      url.pathname === '/api/roads'
+    ) {
+
+      return handleRoads(env);
+    }
+
+
+    // =================================================
+    // SIGNAL EVENTS POST
+    // =================================================
+
+    if (
+      request.method === 'POST' &&
+      url.pathname === '/api/signal-events'
+    ) {
+
+      return handleSignalEventPost(
+        request,
+        env
+      );
+    }
+
+
+    // =================================================
+    // SIGNAL EVENTS GET
+    // =================================================
+
+    if (
+      request.method === 'GET' &&
+      url.pathname === '/api/signal-events'
+    ) {
+
+      return handleSignalEventsGet(
+        request,
+        env
+      );
+    }
+
+
+    // =================================================
+    // SIGNAL CYCLE
+    // =================================================
+
+    if (
+      request.method === 'GET' &&
+      url.pathname === '/api/signal-cycle'
+    ) {
+
+      return handleSignalCycle(
+        request,
+        env
+      );
+    }
+
+
+    // =================================================
+    // SIGNAL MODEL
+    // =================================================
+
+    if (
+      request.method === 'GET' &&
+      url.pathname === '/api/signal-model'
+    ) {
+
+      return handleSignalModel(
+        request,
+        env
+      );
+    }
+
+
+    // =================================================
+    // SIGNAL COUNTDOWN
+    // =================================================
+
+    if (
+      request.method === 'GET' &&
+      url.pathname === '/api/signal-countdown'
+    ) {
+
+      return handleSignalCountdown(
+        request,
+        env
+      );
+    }
+
+
+    // =================================================
+    // 404
+    // =================================================
+
+    return json({
+
+      ok: false,
+
+      error:
+        'Not Found',
+
+      path:
+        url.pathname
+
+    }, {
+      status: 404
+    });
+  }
+};
