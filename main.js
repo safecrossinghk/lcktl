@@ -1049,7 +1049,69 @@ if (
 
 
 // ===================================================
-// 15. 初始化
+// 15. PWA 前景／背景自動重新校正
+// ===================================================
+
+let countdownWasRunningBeforeHidden = false;
+
+document.addEventListener('visibilitychange', async () => {
+
+  // ---------------------------------------------------
+  // PWA 進入背景
+  // ---------------------------------------------------
+
+  if (document.hidden) {
+
+    countdownWasRunningBeforeHidden =
+      countdownTimer !== null;
+
+    if (countdownTimer !== null) {
+      clearInterval(countdownTimer);
+      countdownTimer = null;
+    }
+
+    console.log(
+      'LSK001 PWA 已進入背景，暫停本地倒數 Timer。'
+    );
+
+    return;
+  }
+
+
+  // ---------------------------------------------------
+  // PWA 返回前景
+  // ---------------------------------------------------
+
+  if (countdownWasRunningBeforeHidden) {
+
+    countdownWasRunningBeforeHidden = false;
+
+    console.log(
+      'LSK001 PWA 返回前景，重新向 Worker 校正倒數…'
+    );
+
+    try {
+
+      await loadCountdown();
+
+      console.log(
+        'LSK001 PWA 返回前景後重新校正完成。'
+      );
+
+    } catch (error) {
+
+      console.error(
+        'LSK001 返回前景重新校正失敗：',
+        error
+      );
+
+    }
+  }
+});
+
+
+// ===================================================
+// 16. 初始化
 // ===================================================
 
 async function init() {
