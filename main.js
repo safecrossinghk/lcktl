@@ -237,7 +237,7 @@ function stopCountdownForUser() {
 
 
 // ===================================================
-// 9. 更新 PWA 倒數畫面 (優化：改用 Math.ceil)
+// 9. 更新 PWA 倒數畫面 (顯示 0 秒過渡版)
 // ===================================================
 
 function updateCountdownDisplay(remainingSec) {
@@ -252,9 +252,12 @@ function updateCountdownDisplay(remainingSec) {
   countdownElements.state.textContent =
     countdownState === 'GREEN' ? '🟢 綠燈' : '🔴 紅燈';
 
-  // 使用 Math.ceil 確保倒數至最後 0 秒時才準確切換，不會停頓在 0 秒
+  // 使用 Math.floor：
+  // 1.9秒 -> 顯示 1
+  // 0.9秒 -> 顯示 0 (提示使用者即將轉燈)
+  // <=0秒 -> 在 setInterval 觸發轉燈
   countdownElements.seconds.textContent =
-    Math.max(0, Math.ceil(remainingSec));
+    Math.max(0, Math.floor(remainingSec));
 
   const modelText =
     countdownModel?.source === 'TIME_DISTANCE_WEIGHTED'
