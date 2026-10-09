@@ -193,7 +193,7 @@ let currentState = null;
 let modelData = null;
 
 // =================================================
-// 1. 取得 Worker 倒數資料（加入防快取）
+// 1. 取得 Worker 倒數資料（修復 CORS 攔截問題）
 // =================================================
 async function loadCountdown() {
   refreshButton.disabled = true;
@@ -201,16 +201,10 @@ async function loadCountdown() {
   statusElement.classList.remove('error');
 
   try {
-    // 加上時間戳參數與 Header 防快取，防止 Safari/Chrome 讀取舊 API 快取
+    // 依靠 URL 的時間戳參數 `_t` 即可完美達到防快取效果，且不會引發 CORS Failed to fetch
     const cacheBuster = `_t=${Date.now()}`;
     const response = await fetch(
-      `${WORKER_API}/api/signal-countdown?road_id=LSK001&${cacheBuster}`,
-      {
-        headers: {
-          'Cache-Control': 'no-cache, no-store, must-revalidate',
-          'Pragma': 'no-cache'
-        }
-      }
+      `${WORKER_API}/api/signal-countdown?road_id=LSK001&${cacheBuster}`
     );
 
     const data = await response.json();
