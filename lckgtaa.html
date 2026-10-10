@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="zh-HK">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#101923">
+<title>荔枝角 GTA｜LSK001 互動地圖</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="">
+<style>
+:root{--bg:#101923;--panel:#142231;--line:#2d4355;--text:#f4f7fb;--muted:#9eb0c1;--cyan:#50d8d0;--pink:#ff4f91;--yellow:#ffd34f}
+*{box-sizing:border-box}html,body{height:100%;margin:0;font-family:system-ui,-apple-system,"Segoe UI",sans-serif;background:var(--bg);color:var(--text)}
+.app{height:100%;display:grid;grid-template-rows:auto 1fr}.topbar{z-index:1000;background:#101923f2;border-bottom:1px solid var(--line);padding:10px 14px;display:flex;gap:12px;align-items:center;justify-content:space-between}
+.brand{font-weight:900;letter-spacing:.3px;font-size:18px}.brand small{display:block;color:var(--muted);font-weight:500;font-size:11px;letter-spacing:1px}
+.pill{font-size:12px;border:1px solid #b77a23;background:#3b2c16;color:#ffd78a;border-radius:999px;padding:6px 9px;white-space:nowrap}
+.main{position:relative;min-height:0}#map{height:100%;width:100%;background:#d8e1e4}
+.panel{position:absolute;z-index:800;top:12px;right:12px;width:min(310px,calc(100% - 24px));max-height:calc(100% - 24px);overflow:auto;background:#101923f0;border:1px solid var(--line);border-radius:14px;box-shadow:0 8px 28px #0005;padding:13px;backdrop-filter:blur(10px)}
+h2{font-size:14px;margin:0 0 9px}.sub{color:var(--muted);font-size:12px;line-height:1.5}.section{padding:11px 0;border-top:1px solid var(--line)}.section:first-of-type{border-top:0}
+button{font:inherit;color:var(--text);background:#203548;border:1px solid #3b566b;border-radius:9px;padding:9px 10px;cursor:pointer}button:active{transform:scale(.98)}button.primary{background:#087e83;border-color:#20bfc0;font-weight:700}.btnrow{display:flex;gap:7px;flex-wrap:wrap}.btnrow button{flex:1}
+label.toggle{display:flex;gap:9px;align-items:center;justify-content:space-between;font-size:13px;margin:10px 0}.toggle input{accent-color:var(--cyan);width:17px;height:17px}
+.legend{display:flex;gap:8px;align-items:center;font-size:12px;margin:7px 0}.dot{width:12px;height:12px;border-radius:50%;display:inline-block}.green{background:#2bc66d}.amber{background:#ffc247}.red{background:#ff5b5b}
+.stat{display:grid;grid-template-columns:1fr 1fr;gap:8px}.stat div{padding:10px;background:#1a2c3d;border-radius:9px}.stat b{font-size:19px;display:block}.stat span{font-size:11px;color:var(--muted)}
+.leaflet-popup-content-wrapper,.leaflet-popup-tip{background:#132435;color:#f4f7fb}.leaflet-popup-content{margin:12px;line-height:1.5}.leaflet-control-attribution{font-size:10px!important}
+.bottomnote{position:absolute;z-index:700;bottom:12px;left:12px;max-width:min(430px,calc(100% - 24px));padding:9px 12px;background:#101923ed;border:1px solid var(--line);border-radius:10px;font-size:11px;color:#c3d0dc;line-height:1.45}
+@media(max-width:650px){.topbar{padding:9px 11px}.brand{font-size:16px}.panel{top:auto;right:8px;bottom:8px;width:min(260px,calc(100% - 16px));max-height:52%;padding:10px}.bottomnote{left:8px;bottom:calc(min(52%, 330px) + 16px);max-width:calc(100% - 16px)}.section{padding:8px 0}.stat b{font-size:17px}}
+</style>
+</head>
+<body>
+<div class="app">
+<header class="topbar">
+  <div class="brand">荔枝角 GTA <small>LAI CHI KOK · INTERACTIVE DISTRICT MAP</small></div>
+  <div class="pill">● 人流：示範資料</div>
+</header>
+<main class="main">
+  <div id="map" aria-label="荔枝角互動地圖"></div>
+  <aside class="panel">
+    <h2>🗺️ 區域控制台</h2>
+    <div class="sub">以 LSK001 為起點；底圖道路來自 OpenStreetMap，可縮放及拖曳核對真實位置。</div>
+    <div class="section">
+      <div class="stat">
+        <div><b>LSK001</b><span>行人過路處標記</span></div>
+        <div><b id="zoomValue">—</b><span>目前地圖縮放級別</span></div>
+      </div>
+      <div class="btnrow" style="margin-top:9px">
+        <button class="primary" id="homeBtn">返回 LSK001</button>
+        <button id="osmBtn">開啟 OSM 地圖</button>
+      </div>
+    </div>
+    <div class="section">
+      <h2>人流圖層（示範）</h2>
+      <div class="legend"><i class="dot green"></i>低（示範）</div>
+      <div class="legend"><i class="dot amber"></i>中（示範）</div>
+      <div class="legend"><i class="dot red"></i>高（示範）</div>
+      <label class="toggle">顯示人流示範區域 <input type="checkbox" id="crowdToggle" checked></label>
+      <label class="toggle">顯示 LSK001 標記 <input type="checkbox" id="targetToggle" checked></label>
+      <div class="sub">彩色區域只用來展示介面，不代表即時或實測人流，亦不代表精確人流邊界。</div>
+    </div>
+    <div class="section">
+      <h2>🚦 LSK001 行人過路處</h2>
+      <div class="sub">位置依據現有專案提供的 LSK001 座標作初始定位；正式上線前仍需現場核對過路線及燈柱位置。</div>
+      <div id="coordText" class="sub" style="margin-top:7px">座標載入中…</div>
+      <div class="btnrow" style="margin-top:9px"><button id="copyCoord">複製座標</button><button id="reportBtn">回報位置需修正</button></div>
+      <div id="status" class="sub" style="margin-top:8px"></div>
+    </div>
+    <div class="section">
+      <h2>📍 擴展周邊街道</h2>
+      <div class="sub">點擊地圖可查看該點座標；第二階段再按核實過的資料加入商場、巴士站、出入口及更多過路處。</div>
+    </div>
+  </aside>
+  <div class="bottomnote">真實道路底圖 © OpenStreetMap contributors。人流目前為示範資料；未接入即時人流來源。地標不以 AI 圖片猜測位置。</div>
+</main>
+</div>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+<script>
+(() => {
+  // LSK001 初始座標取自專案先前提供的現場 JSON，正式發布前應再次現場核對。
+  const target = {lat:22.3356897605, lng:114.1490360801, name:"LSK001｜荔枝角道東行與長荔街交界（待現場核對）"};
+  const map = L.map('map', {zoomControl:false}).setView([target.lat,target.lng], 17);
+  L.control.zoom({position:'topleft'}).addTo(map);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom:20, attribution:'&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>'
+  }).addTo(map);
+  const targetIcon = L.divIcon({className:'',html:'<div style="background:#ff4f91;border:3px solid white;color:#101923;font-weight:900;border-radius:10px;padding:5px 8px;box-shadow:0 2px 12px #0008;white-space:nowrap">🚦 LSK001</div>',iconSize:[104,34],iconAnchor:[52,17]});
+  const targetMarker = L.marker([target.lat,target.lng],{icon:targetIcon}).addTo(map).bindPopup('<b>🚦 LSK001</b><br>荔枝角道東行與長荔街交界<br><small>專案座標初始定位；需現場核對</small>');
+  const crowdLayer = L.layerGroup().addTo(map);
+  // 純示範熱區：只為介面展示，不作實際人流判斷。
+  [
+    {lat:22.3360,lng:114.1487,r:75,color:'#2bc66d',label:'低人流（示範）'},
+    {lat:22.3354,lng:114.1497,r:65,color:'#ffc247',label:'中人流（示範）'},
+    {lat:22.3363,lng:114.1501,r:48,color:'#ff5b5b',label:'高人流（示範）'}
+  ].forEach(z => L.circle([z.lat,z.lng],{radius:z.r,color:z.color,weight:1,fillColor:z.color,fillOpacity:.25}).bindPopup(z.label+'<br>非即時數據').addTo(crowdLayer));
+  const zoomValue = document.getElementById('zoomValue');
+  const update = () => zoomValue.textContent = map.getZoom();
+  map.on('zoomend',update); update();
+  document.getElementById('coordText').textContent = `${target.lat.toFixed(6)}, ${target.lng.toFixed(6)}`;
+  document.getElementById('homeBtn').onclick = () => map.setView([target.lat,target.lng],17);
+  document.getElementById('osmBtn').onclick = () => window.open(`https://www.openstreetmap.org/?mlat=${target.lat}&mlon=${target.lng}#map=18/${target.lat}/${target.lng}`,'_blank','noopener');
+  document.getElementById('crowdToggle').onchange = e => e.target.checked ? crowdLayer.addTo(map) : map.removeLayer(crowdLayer);
+  document.getElementById('targetToggle').onchange = e => e.target.checked ? targetMarker.addTo(map) : map.removeLayer(targetMarker);
+  document.getElementById('copyCoord').onclick = async () => {
+    const s = `${target.lat}, ${target.lng}`;
+    const status = document.getElementById('status');
+    try { await navigator.clipboard.writeText(s); status.textContent='已複製座標。'; }
+    catch { status.textContent='請手動複製座標：'+s; }
+  };
+  document.getElementById('reportBtn').onclick = () => {
+    const url = `https://www.openstreetmap.org/?mlat=${target.lat}&mlon=${target.lng}#map=19/${target.lat}/${target.lng}`;
+    document.getElementById('status').innerHTML = `請對照現場位置；如標記有偏差，記下正確座標後再修正。<br><a style="color:#50d8d0" target="_blank" rel="noopener" href="${url}">在地圖核對</a>`;
+  };
+  map.on('click', e => {
+    L.popup().setLatLng(e.latlng).setContent(`你點選的位置<br>緯度：${e.latlng.lat.toFixed(6)}<br>經度：${e.latlng.lng.toFixed(6)}`).openOn(map);
+  });
+})();
+</script>
+</body>
+</html>
