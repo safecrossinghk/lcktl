@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<meta name="theme-color" content="#07111e">
+<title>荔枝角 GTA｜LSK001 測試版</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<style>
+:root{color-scheme:dark;--bg:#07111e;--panel:rgba(7,17,30,.94);--cyan:#38d9ff;--green:#43f59b;--muted:#9bb0c7}
+*{box-sizing:border-box}html,body,#map{height:100%;width:100%;margin:0}body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:var(--bg);overflow:hidden}#map{position:absolute;inset:0;background:#0c1a28}.leaflet-control-attribution{font-size:9px!important}.leaflet-container{background:#0c1a28}
+.topbar{position:absolute;z-index:800;top:env(safe-area-inset-top,10px);left:12px;right:12px;padding:11px 13px;border:1px solid #24415b;border-radius:15px;background:var(--panel);backdrop-filter:blur(12px);box-shadow:0 8px 30px #0006;pointer-events:none}.brand{font-size:15px;font-weight:800;letter-spacing:.5px;color:white}.sub{font-size:11px;color:var(--muted);margin-top:4px}.live{color:#ffd36a;font-weight:700}
+.marker{width:54px;height:54px;border-radius:50%;background:#07111ef0;border:2px solid var(--cyan);box-shadow:0 0 0 7px #38d9ff24,0 0 24px #38d9ff90;display:flex;align-items:center;justify-content:center;color:white;font-size:13px;font-weight:900;position:relative}.marker:after{content:"";position:absolute;bottom:-10px;width:10px;height:10px;background:var(--cyan);transform:rotate(45deg);border-radius:2px;z-index:-1}.marker small{font-size:9px;color:var(--green);display:block;text-align:center}.crowd{width:18px;height:18px;border-radius:50%;border:2px solid white;box-shadow:0 0 14px currentColor}
+#menuBtn{position:absolute;z-index:1000;right:16px;bottom:calc(22px + env(safe-area-inset-bottom,0px));width:54px;height:54px;border:1px solid #4a718f;border-radius:18px;background:#07111ef2;color:white;font-size:25px;box-shadow:0 8px 24px #0008}
+.panel{position:absolute;z-index:900;right:12px;bottom:calc(88px + env(safe-area-inset-bottom,0px));width:min(310px,calc(100vw - 24px));max-height:64vh;overflow:auto;padding:16px;border:1px solid #24415b;border-radius:18px;background:var(--panel);backdrop-filter:blur(14px);box-shadow:0 12px 35px #0008;transition:transform .22s,opacity .22s}.panel.hidden{transform:translateY(12px);opacity:0;pointer-events:none}.panel h2{font-size:15px;margin:0 0 12px;color:white}.line{display:flex;justify-content:space-between;gap:12px;padding:9px 0;border-bottom:1px solid #203448;font-size:12px}.line span{color:var(--muted)}.line b{color:white;text-align:right}.note{margin-top:12px;padding:10px;border-radius:10px;background:#392b12;color:#ffd36a;font-size:11px;line-height:1.5}.btns{display:flex;gap:8px;margin-top:12px}.btns button{flex:1;border:1px solid #31526e;background:#10263a;color:#eaf7ff;padding:10px;border-radius:10px;font-weight:700}.btns button:active{background:#1b4562}.legend{font-size:10px;color:var(--muted);margin-top:10px;line-height:1.5}
+@media(min-width:760px){.panel{right:18px;top:100px;bottom:auto;max-height:calc(100vh - 125px)}#menuBtn{display:none}.panel.hidden{transform:none;opacity:1;pointer-events:auto}.topbar{max-width:420px}}
+</style>
+</head>
+<body>
+<div id="map" aria-label="荔枝角地圖"></div>
+<div class="topbar"><div class="brand">荔枝角 GTA <span style="color:var(--cyan)">／ LSK001</span></div><div class="sub">REAL MAP · 手機互動測試版　<span class="live">● 示範模式</span></div></div>
+<section id="panel" class="panel">
+<h2>📍 LSK001 路口控制台</h2>
+<div class="line"><span>測試位置</span><b>荔枝角道東行 × 長荔街</b></div>
+<div class="line"><span>地圖中心</span><b>LSK001</b></div>
+<div class="line"><span>人流圖層</span><b style="color:#ffd36a">示範資料</b></div>
+<div class="line"><span>交通燈倒數</span><b>尚未接入</b></div>
+<div class="note">⚠️ 人流圓點只作介面示範，並非即時人流、Google 數據或實際人數。地圖位置以底圖為準。</div>
+<div class="btns"><button id="centerBtn">回到 LSK001</button><button id="crowdBtn">顯示／隱藏人流</button></div>
+<div class="legend">底圖 © OpenStreetMap contributors · 交通燈即時倒數尚未接入。</div>
+</section>
+<button id="menuBtn" aria-label="開啟控制台">☰</button>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+(function(){
+const target=[22.3356897605,114.1490360801];
+const map=L.map('map',{zoomControl:false}).setView(target,17);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:20,attribution:'© OpenStreetMap contributors'}).addTo(map);
+L.control.zoom({position:'bottomleft'}).addTo(map);
+const icon=L.divIcon({className:'',html:'<div class="marker"><div><small>LSK001</small>TEST</div></div>',iconSize:[54,66],iconAnchor:[27,56]});
+L.marker(target,{icon}).addTo(map).bindPopup('<b>LSK001 測試路口</b><br>荔枝角道東行 × 長荔街');
+const crowdLayer=L.layerGroup().addTo(map);
+const demo=[ [22.33602,114.14870,'#ff5470'],[22.33536,114.14940,'#ffd34d'],[22.33593,114.14962,'#43f59b'],[22.33522,114.14882,'#b78cff'],[22.33620,114.14913,'#38d9ff'] ];
+demo.forEach(p=>L.circleMarker([p[0],p[1]],{radius:9,color:'#fff',weight:1,fillColor:p[2],fillOpacity:.88}).bindTooltip('人流：示範資料').addTo(crowdLayer));
+const panel=document.getElementById('panel'),menu=document.getElementById('menuBtn');
+menu.addEventListener('click',()=>{panel.classList.toggle('hidden');menu.textContent=panel.classList.contains('hidden')?'☰':'×'});
+document.getElementById('centerBtn').addEventListener('click',()=>map.flyTo(target,17,{duration:.6}));
+let shown=true;document.getElementById('crowdBtn').addEventListener('click',()=>{shown=!shown;if(shown)crowdLayer.addTo(map);else map.removeLayer(crowdLayer)});
+})();
+</script>
+</body>
+</html>
