@@ -1,363 +1,572 @@
-<!DOCTYPE html>
-<html lang="zh-Hant">
-
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="theme-color" content="#f5f7fa">
-<title>安全過路 HK - LSK001 實時倒數</title>
-
-<style>
-* { box-sizing: border-box; }
-body {
-  margin: 0; padding: 20px 16px; background: #f5f7fa; color: #222;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-}
-.container { max-width: 520px; margin: 0 auto; }
-h1 { margin: 0 0 6px; text-align: center; font-size: 26px; }
-.sub-title { margin: 0 0 20px; text-align: center; color: #666; font-size: 13px; line-height: 1.4; }
-
-.card {
-  background: white; border-radius: 20px; padding: 22px 18px;
-  margin-bottom: 16px; box-shadow: 0 4px 18px rgba(0, 0, 0, 0.08);
-}
-.state { font-size: 22px; font-weight: 700; margin-bottom: 8px; text-align: center; }
-.seconds { font-size: 76px; line-height: 1; font-weight: 700; margin: 10px 0; text-align: center; }
-.unit { font-size: 18px; color: #666; text-align: center; }
-.status { min-height: 22px; margin-top: 14px; color: #666; font-size: 13px; text-align: center; }
-
-.btn {
-  width: 100%; margin-top: 12px; padding: 14px; border: 0;
-  border-radius: 12px; font-size: 16px; font-weight: 600; cursor: pointer;
-}
-.btn-dark { background: #222; color: white; }
-.btn-green { background: #2e7d32; color: white; }
-.btn-red { background: #c62828; color: white; }
-.btn:disabled { opacity: 0.4; cursor: not-allowed; }
-
-.section-title { font-weight: 700; margin-bottom: 10px; font-size: 15px; }
-.info-row {
-  display: flex; justify-content: space-between; gap: 12px;
-  padding: 6px 0; border-bottom: 1px solid #eee; font-size: 13px;
-}
-.info-row:last-child { border-bottom: 0; }
-.info-label { color: #666; }
-.info-value { text-align: right; font-weight: 600; }
-.error { color: #c62828; }
-</style>
-</head>
-
-<body>
-
-<main class="container">
-  <h1>安全過路 HK</h1>
-  <p class="sub-title">LSK001 實時倒數系統（已結合 GPS 定位與高精度延遲補償）</p>
-
-  <!-- 倒數主卡片 -->
-  <section class="card">
-    <div class="state" id="state">正在取得資料…</div>
-    <div class="seconds" id="seconds">--</div>
-    <div class="unit">秒</div>
-    <div class="status" id="status">正在連接 LSK001 Worker…</div>
-    <button class="btn btn-dark" id="refreshButton" type="button">🔄 重新校正</button>
-  </section>
-
-  <!-- GPS 與現場按鈕卡片 -->
-  <section class="card">
-    <div class="section-title">📍 位置狀態 (LSK001 100米範圍限制)</div>
-    <div class="info-row"><span class="info-label">距離 LSK001</span><span class="info-value" id="distanceValue">等待 GPS...</span></div>
-    <div class="info-row"><span class="info-label">GPS 精度</span><span class="info-value" id="accuracyValue">等待 GPS...</span></div>
-
-    <div style="margin-top: 16px;">
-      <div class="section-title" style="text-align: center; margin-bottom: 8px;">選擇剛剛的燈號 (100米內解鎖)</div>
-      <button class="btn btn-green" id="btnGreen" disabled>🟢 剛剛轉綠</button>
-      <button class="btn btn-red" id="btnRed" disabled>🔴 剛剛轉紅</button>
-      <div id="gpsStatusHint" style="font-size: 12px; color: #888; text-align: center; margin-top: 8px;">進入 LSK001 100 米範圍後，即可解鎖回報按鈕。</div>
-    </div>
-  </section>
-
-  <!-- Worker 數據面板 -->
-  <section class="card">
-    <div class="section-title">Worker 倒數資料</div>
-    <div class="info-row"><span class="info-label">GREEN</span><span class="info-value" id="greenAverage">--</span></div>
-    <div class="info-row"><span class="info-label">RED</span><span class="info-value" id="redAverage">--</span></div>
-    <div class="info-row"><span class="info-label">Cycle</span><span class="info-value" id="cycleAverage">--</span></div>
-    <div class="info-row"><span class="info-label">模型</span><span class="info-value" id="modelSource">--</span></div>
-    <div class="info-row"><span class="info-label">API 計算時間</span><span class="info-value" id="apiTime">--</span></div>
-    <div class="info-row"><span class="info-label">最新 GREEN 距今</span><span class="info-value" id="greenAge">--</span></div>
-  </section>
-</main>
-
-<script>
 const WORKER_API = 'https://lsk001-api.ctakwah.workers.dev';
-const LSK001_LAT = 22.3375; // 請換成你實際的 LSK001 緯度
-const LSK001_LNG = 114.1480; // 請換成你實際的 LSK001 經度
 
-const stateElement = document.getElementById('state');
-const secondsElement = document.getElementById('seconds');
-const statusElement = document.getElementById('status');
-const refreshButton = document.getElementById('refreshButton');
-const distanceValue = document.getElementById('distanceValue');
-const accuracyValue = document.getElementById('accuracyValue');
-const btnGreen = document.getElementById('btnGreen');
-const btnRed = document.getElementById('btnRed');
-const gpsStatusHint = document.getElementById('gpsStatusHint');
+const elements = {
+  status: document.querySelector('[data-location-status]'),
+  distance: document.querySelector('[data-distance]'),
+  accuracy: document.querySelector('[data-accuracy]'),
+  signalButton: document.querySelector('[data-signal-button]')
+};
 
-const greenAverageElement = document.getElementById('greenAverage');
-const redAverageElement = document.getElementById('redAverage');
-const cycleAverageElement = document.getElementById('cycleAverage');
-const modelSourceElement = document.getElementById('modelSource');
-const apiTimeElement = document.getElementById('apiTime');
-const greenAgeElement = document.getElementById('greenAge');
+let roads = [];
+let targetRoad = null;
+let latestPosition = null;
+
+
+// ===================================================
+// LSK001 實驗倒數 UI
+// ===================================================
+
+const countdownElements = {
+  panel: document.querySelector('[data-countdown-panel]'),
+  state: document.querySelector('[data-countdown-state]'),
+  seconds: document.querySelector('[data-countdown-seconds]'),
+  info: document.querySelector('[data-countdown-info]'),
+  reviseButton: document.querySelector('[data-countdown-revise]'),
+  stopButton: document.querySelector('[data-countdown-stop]')
+};
 
 let countdownTimer = null;
 let countdownEndAtMs = null;
-let currentState = null;
-let modelData = null;
+let countdownState = null;
+let countdownModel = null;
+let countdownLatestGreenAgeSec = null;
+let countdownStartedAtMs = null;
 
-// =================================================
-// 1. 取得 Worker 倒數資料（含網絡延遲補償）
-// =================================================
-async function loadCountdown() {
-  refreshButton.disabled = true;
-  statusElement.textContent = '正在向 Worker 取得最新資料…';
-  statusElement.classList.remove('error');
 
-  const fetchStartTime = Date.now();
+// ===================================================
+// 1. 讀取 Worker /api/roads
+// ===================================================
 
-  try {
-    const cacheBuster = `_t=${fetchStartTime}`;
-    const response = await fetch(
-      `${WORKER_API}/api/signal-countdown?road_id=LSK001&${cacheBuster}`
-    );
+async function loadRoads() {
+  const response = await fetch(`${WORKER_API}/api/roads`);
 
-    const data = await response.json();
-    console.log('LSK001 Countdown API：', data);
+  if (!response.ok) {
+    throw new Error(`道路資料 HTTP ${response.status}`);
+  }
 
-    if (!response.ok || !data.ok || !data.countdown_available || !data.available) {
-      throw new Error('目前沒有可用的倒數資料');
+  const data = await response.json();
+
+  if (!data.ok || !Array.isArray(data.roads)) {
+    throw new Error('道路資料格式不正確');
+  }
+
+  roads = data.roads;
+
+  if (roads.length === 0) {
+    throw new Error('目前沒有可用道路資料');
+  }
+
+  targetRoad =
+    roads.find(
+      (road) => road.road_id === 'LSK001'
+    ) || roads[0];
+
+  console.log('LSK001 道路資料：', targetRoad);
+
+  return targetRoad;
+}
+
+
+// ===================================================
+// 2. 計算兩個 GPS 座標之間的距離
+//    使用 Haversine formula (新增 Math.min/max 防範 NaN)
+// ===================================================
+
+function distanceMeters(point1, point2) {
+  const earthRadius = 6371000;
+
+  const lat1 = point1.latitude * Math.PI / 180;
+  const lat2 = point2.latitude * Math.PI / 180;
+
+  const deltaLat = (point2.latitude - point1.latitude) * Math.PI / 180;
+  const deltaLon = (point2.longitude - point1.longitude) * Math.PI / 180;
+
+  const a =
+    Math.sin(deltaLat / 2) ** 2 +
+    Math.cos(lat1) *
+    Math.cos(lat2) *
+    Math.sin(deltaLon / 2) ** 2;
+
+  const aClamped = Math.min(1, Math.max(0, a));
+  const c = 2 * Math.atan2(Math.sqrt(aClamped), Math.sqrt(1 - aClamped));
+
+  return earthRadius * c;
+}
+
+
+// ===================================================
+// 3. 顯示 GPS 位置 + 100 米範圍判斷
+// ===================================================
+
+function handlePosition(position) {
+  if (!targetRoad) {
+    elements.status.textContent = '尚未取得 LSK001 道路資料。';
+    return;
+  }
+
+  const latitude = position.coords.latitude;
+  const longitude = position.coords.longitude;
+  const accuracy = position.coords.accuracy;
+
+  latestPosition = { latitude, longitude, accuracy };
+
+  const userPosition = { latitude, longitude };
+  const roadPosition = { latitude: targetRoad.latitude, longitude: targetRoad.longitude };
+
+  const distance = distanceMeters(userPosition, roadPosition);
+  const radius = Number(targetRoad.radius) || 100;
+
+  if (distance <= radius) {
+    elements.status.textContent = `已進入 LSK001 ${radius} 米範圍`;
+    elements.signalButton.disabled = false;
+  } else {
+    elements.status.textContent = `尚未進入 LSK001 ${radius} 米範圍`;
+    elements.signalButton.disabled = true;
+  }
+
+  elements.distance.textContent = `${distance.toFixed(1)} 米`;
+  elements.accuracy.textContent = `±${Math.round(accuracy)} 米`;
+}
+
+
+// ===================================================
+// 4. GPS 錯誤
+// ===================================================
+
+function handlePositionError(error) {
+  console.error('GPS error：', error);
+
+  if (error.code === 1) {
+    elements.status.textContent = 'GPS 權限被拒絕，請允許網站使用位置。';
+  } else if (error.code === 2) {
+    elements.status.textContent = '暫時無法取得 GPS 位置。';
+  } else if (error.code === 3) {
+    elements.status.textContent = 'GPS 定位逾時，請稍後再試。';
+  } else {
+    elements.status.textContent = '無法取得 GPS 位置。';
+  }
+
+  elements.distance.textContent = '無法計算';
+  elements.accuracy.textContent = '無法取得';
+}
+
+
+// ===================================================
+// 5. 開始 GPS
+// ===================================================
+
+function startGPS() {
+  if (!navigator.geolocation) {
+    elements.status.textContent = '此裝置不支援 GPS 定位。';
+    return;
+  }
+
+  elements.status.textContent = '正在取得 GPS 位置…';
+
+  navigator.geolocation.watchPosition(
+    handlePosition,
+    handlePositionError,
+    {
+      enableHighAccuracy: true,
+      maximumAge: 10000,
+      timeout: 15000
     }
+  );
+}
 
-    const rawRemaining = Number(data.estimated_remaining_sec);
-    if (!Number.isFinite(rawRemaining)) {
-      throw new Error('Worker 沒有提供有效的剩餘時間');
-    }
 
-    // 網絡延遲補償計算
-    const latencySec = (Date.now() - fetchStartTime) / 1000;
-    const adjustedRemaining = Math.max(0, rawRemaining - latencySec);
+// ===================================================
+// 6. 顯示 / 隱藏倒數畫面
+// ===================================================
 
-    currentState = data.current_state;
-    modelData = {
-      green_average_sec: Number(data.model?.green_average_sec) || 31.9,
-      red_average_sec: Number(data.model?.red_average_sec) || 91.9
-    };
+function showCountdownPanel() {
+  if (!countdownElements.panel) return;
+  countdownElements.panel.hidden = false;
+}
 
-    countdownEndAtMs = Date.now() + adjustedRemaining * 1000;
-    updateDisplay(adjustedRemaining, currentState);
-    startLocalCountdown();
+function hideCountdownPanel() {
+  if (!countdownElements.panel) return;
+  countdownElements.panel.hidden = true;
+}
 
-    greenAverageElement.textContent = `${Number(data.model.green_average_sec).toFixed(1)} 秒`;
-    redAverageElement.textContent = `${Number(data.model.red_average_sec).toFixed(1)} 秒`;
-    cycleAverageElement.textContent = `${Number(data.model.cycle_average_sec).toFixed(1)} 秒`;
-    modelSourceElement.textContent = data.model_source || '--';
-    apiTimeElement.textContent = data.current_hong_kong_time || '--';
-    greenAgeElement.textContent = Number.isFinite(Number(data.latest_green_age_sec))
-      ? `${Number(data.latest_green_age_sec).toFixed(1)} 秒`
-      : '--';
 
-    statusElement.textContent = '✅ 已與 Worker 同步';
-  } catch (error) {
-    console.error('取得 LSK001 倒數失敗：', error);
-    if (!Number.isFinite(countdownEndAtMs)) {
-      stopLocalCountdown();
-      stateElement.textContent = '⚠️ 無法取得倒數';
-      secondsElement.textContent = '--';
-    }
-    statusElement.textContent = `取得資料失敗：${error.message}`;
-    statusElement.classList.add('error');
-  } finally {
-    refreshButton.disabled = false;
+// ===================================================
+// 7. 停止本地倒數 timer
+// ===================================================
+
+function stopCountdownTimer() {
+  if (countdownTimer !== null) {
+    clearInterval(countdownTimer);
+    countdownTimer = null;
+  }
+  countdownEndAtMs = null;
+}
+
+
+// ===================================================
+// 8. 使用者主動停止本次倒數
+// ===================================================
+
+function stopCountdownForUser() {
+  stopCountdownTimer();
+
+  if (countdownElements.state) {
+    countdownElements.state.textContent = '⏹️ 倒數已停止';
+  }
+
+  if (countdownElements.seconds) {
+    countdownElements.seconds.textContent = '--';
+  }
+
+  if (countdownElements.info) {
+    countdownElements.info.textContent =
+      '本次 LSK001 倒數已停止。離開現場後可停止；需要重新開始時可按「重新校正」。';
   }
 }
 
-// =================================================
-// 2. 更新畫面 (Math.floor 確保 0 秒過渡)
-// =================================================
-function updateDisplay(remaining, state) {
-  stateElement.textContent = state === 'GREEN' ? '🟢 綠燈' : '🔴 紅燈';
-  secondsElement.textContent = Math.max(0, Math.floor(remaining));
+
+// ===================================================
+// 9. 更新 PWA 倒數畫面 (顯示 0 秒過渡版)
+// ===================================================
+
+function updateCountdownDisplay(remainingSec) {
+  if (
+    !countdownElements.state ||
+    !countdownElements.seconds ||
+    !countdownElements.info
+  ) {
+    return;
+  }
+
+  countdownElements.state.textContent =
+    countdownState === 'GREEN' ? '🟢 綠燈' : '🔴 紅燈';
+
+  // Math.floor 確保倒數至最後不足 1 秒時顯示 0
+  countdownElements.seconds.textContent =
+    Math.max(0, Math.floor(remainingSec));
+
+  const modelText =
+    countdownModel?.source === 'TIME_DISTANCE_WEIGHTED'
+      ? '最接近當刻＋時間距離加權'
+      : '整體資料';
+
+  let infoText = '實驗倒數｜資料模型：' + modelText;
+
+  if (countdownModel?.fieldCorrectionApplied) {
+    infoText += `｜GREEN 實測 ${countdownModel.greenCorrectionSec.toFixed(1)} 秒`;
+  }
+
+  countdownElements.info.textContent = infoText;
 }
 
-// =================================================
-// 3. 本地倒數計時器
-// =================================================
+
+// ===================================================
+// 10. 開始本地倒數 (純本地順暢切換，不強制背景 Fetch 擾亂節奏)
+// ===================================================
+
 function startLocalCountdown() {
   if (countdownTimer !== null) {
     clearInterval(countdownTimer);
     countdownTimer = null;
   }
 
-  countdownTimer = setInterval(() => {
-    if (!Number.isFinite(countdownEndAtMs)) return;
-
-    const remaining = (countdownEndAtMs - Date.now()) / 1000;
-
-    if (remaining <= 0) {
-      const nextState = currentState === 'GREEN' ? 'RED' : 'GREEN';
-      const nextDuration = nextState === 'GREEN'
-        ? modelData.green_average_sec
-        : modelData.red_average_sec;
-
-      currentState = nextState;
-      countdownEndAtMs = Date.now() + nextDuration * 1000;
-      updateDisplay(nextDuration, currentState);
-      return;
-    }
-
-    updateDisplay(remaining, currentState);
-  }, 250);
-}
-
-function stopLocalCountdown() {
-  if (countdownTimer !== null) {
-    clearInterval(countdownTimer);
-    countdownTimer = null;
-  }
-}
-
-// =================================================
-// 4. GPS 定位與 Haversine 距離計算 (100米範圍檢查)
-// =================================================
-function initGPS() {
-  if (!navigator.geolocation) {
-    distanceValue.textContent = '不支援 GPS';
+  if (
+    !countdownState ||
+    !countdownModel ||
+    !Number.isFinite(countdownEndAtMs)
+  ) {
     return;
   }
 
-  navigator.geolocation.watchPosition(
-    (position) => {
-      const lat = position.coords.latitude;
-      const lng = position.coords.longitude;
-      const accuracy = position.coords.accuracy;
+  countdownTimer = setInterval(() => {
+    const nowMs = Date.now();
 
-      accuracyValue.textContent = `${Math.round(accuracy)} 米`;
+    if (
+      Number.isFinite(countdownLatestGreenAgeSec) &&
+      Number.isFinite(countdownStartedAtMs)
+    ) {
+      const currentGreenAgeSec =
+        countdownLatestGreenAgeSec + (nowMs - countdownStartedAtMs) / 1000;
 
-      // Haversine 公式計算距離
-      const distance = getDistanceFromLatLonInMeters(lat, lng, LSK001_LAT, LSK001_LNG);
-      distanceValue.textContent = `${Math.round(distance)} 米`;
-
-      // 100 米範圍限制
-      if (distance <= 100) {
-        btnGreen.disabled = false;
-        btnRed.disabled = false;
-        gpsStatusHint.textContent = '✅ 已進入 LSK001 100 米範圍，按鈕已解鎖！';
-        gpsStatusHint.style.color = '#2e7d32';
-      } else {
-        btnGreen.disabled = true;
-        btnRed.disabled = true;
-        gpsStatusHint.textContent = `📍 距離 LSK001 尚有 ${Math.round(distance)} 米（需在 100 米內才可回報）`;
-        gpsStatusHint.style.color = '#888';
+      if (currentGreenAgeSec >= 7200) {
+        stopCountdownTimer();
+        if (countdownElements.state) countdownElements.state.textContent = '等待新的轉燈資料';
+        if (countdownElements.seconds) countdownElements.seconds.textContent = '--';
+        if (countdownElements.info) countdownElements.info.textContent = '最新 GREEN 已超過 2 小時，請重新記錄轉燈。';
+        return;
       }
-    },
-    (error) => {
-      console.error('GPS 錯誤：', error);
-      distanceValue.textContent = '無法取得定位';
-    },
-    { enableHighAccuracy: true, maximumAge: 5000, timeout: 10000 }
-  );
-}
-
-function getDistanceFromLatLonInMeters(lat1, lon1, lat2, lon2) {
-  const R = 6371000; // 地球半徑 (米)
-  const dLat = deg2rad(lat2 - lat1);
-  const dLon = deg2rad(lon2 - lon1);
-  const a =
-    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos(deg2rad(lat1)) * Math.cos(deg2rad(lat2)) *
-    Math.sin(dLon / 2) * Math.sin(dLon / 2);
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  return R * c;
-}
-
-function deg2rad(deg) {
-  return deg * (Math.PI / 180);
-}
-
-// =================================================
-// 5. 現場按鈕回報 (轉綠 / 轉紅)
-// =================================================
-async function reportSignalEvent(state) {
-  btnGreen.disabled = true;
-  btnRed.disabled = true;
-  statusElement.textContent = `正在回報「${state === 'GREEN' ? '轉綠' : '轉紅'}」事件…`;
-
-  try {
-    const response = await fetch(`${WORKER_API}/api/signal-event`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        road_id: 'LSK001',
-        event_type: state,
-        timestamp: Date.now()
-      })
-    });
-
-    const result = await response.json();
-    if (!response.ok || !result.ok) {
-      throw new Error(result.message || '回報失敗');
     }
 
-    statusElement.textContent = '✅ 回報成功，已重新校正倒數！';
-    // 回報成功後立刻重新載入最新倒數資料
-    loadCountdown();
+    let remainingSec = (countdownEndAtMs - nowMs) / 1000;
+
+    // ---------------------------------------------------
+    // 本地倒數完成：純本地無縫切換下一個週期，不發起網絡 Fetch
+    // ---------------------------------------------------
+    if (remainingSec <= 0) {
+      console.log('LSK001 本地倒數完成，切換下一個燈號…');
+
+      const nextState = countdownState === 'GREEN' ? 'RED' : 'GREEN';
+      const nextDuration =
+        nextState === 'GREEN'
+          ? countdownModel.green_average_sec
+          : countdownModel.red_average_sec;
+
+      if (Number.isFinite(nextDuration) && nextDuration > 0) {
+        countdownState = nextState;
+        countdownEndAtMs = Date.now() + nextDuration * 1000;
+        updateCountdownDisplay(nextDuration);
+      }
+      return;
+    }
+
+    updateCountdownDisplay(remainingSec);
+  }, 250);
+}
+
+
+// ===================================================
+// 11. 呼叫 Worker /api/signal-countdown (含網絡延遲補償)
+// ===================================================
+
+async function loadCountdown() {
+  if (!countdownElements.panel) {
+    console.warn('找不到 countdown-panel。');
+    return;
+  }
+
+  const fetchStartTime = Date.now();
+
+  try {
+    console.log('正在取得 LSK001 signal countdown…');
+
+    const cacheBuster = `_t=${fetchStartTime}`;
+    const response = await fetch(
+      `${WORKER_API}/api/signal-countdown?road_id=LSK001&${cacheBuster}`
+    );
+    const data = await response.json();
+
+    console.log('LSK001 countdown API：', data);
+
+    if (
+      !response.ok ||
+      !data.ok ||
+      !data.countdown_available ||
+      !data.available
+    ) {
+      stopCountdownTimer();
+      hideCountdownPanel();
+      return;
+    }
+
+    if (
+      !data.model ||
+      !Number.isFinite(Number(data.model.green_average_sec)) ||
+      !Number.isFinite(Number(data.model.red_average_sec)) ||
+      !Number.isFinite(Number(data.model.cycle_average_sec)) ||
+      !Number.isFinite(Number(data.estimated_remaining_sec))
+    ) {
+      console.error('Countdown API 資料不足：', data);
+      stopCountdownTimer();
+      hideCountdownPanel();
+      return;
+    }
+
+    // 計算網絡往返延遲並精確扣除
+    const latencySec = (Date.now() - fetchStartTime) / 1000;
+    const rawRemaining = Number(data.estimated_remaining_sec);
+    const adjustedRemaining = Math.max(0, rawRemaining - latencySec);
+
+    countdownState = data.current_state;
+
+    countdownModel = {
+      source: data.model_source,
+      green_average_sec: Number(data.model.green_average_sec),
+      red_average_sec: Number(data.model.red_average_sec),
+      cycle_average_sec: Number(data.model.cycle_average_sec),
+      fieldCorrectionApplied: Boolean(data.field_correction?.applied),
+      greenCorrectionSec: Number(data.field_correction?.green_actual_sec)
+    };
+
+    if (!Number.isFinite(countdownModel.greenCorrectionSec)) {
+      countdownModel.greenCorrectionSec = Number(data.model.green_average_sec);
+    }
+
+    countdownLatestGreenAgeSec = Number(data.latest_green_age_sec);
+    countdownStartedAtMs = Date.now();
+
+    // 設定已扣除延遲的目標時間戳
+    countdownEndAtMs = Date.now() + adjustedRemaining * 1000;
+
+    showCountdownPanel();
+    updateCountdownDisplay(adjustedRemaining);
+    startLocalCountdown();
+
   } catch (error) {
-    console.error('回報燈號失敗：', error);
-    statusElement.textContent = `回報失敗：${error.message}`;
-    statusElement.classList.add('error');
-    btnGreen.disabled = false;
-    btnRed.disabled = false;
+    console.error('取得 LSK001 countdown 失敗：', error);
+    if (!Number.isFinite(countdownEndAtMs)) {
+      stopCountdownTimer();
+      hideCountdownPanel();
+    }
   }
 }
 
-btnGreen.addEventListener('click', () => reportSignalEvent('GREEN'));
-btnRed.addEventListener('click', () => reportSignalEvent('RED'));
 
-// =================================================
-// 6. 事件監聽與初始化
-// =================================================
-refreshButton.addEventListener('click', () => loadCountdown());
+// ===================================================
+// 12. Revise／重新校正倒數
+// ===================================================
 
-function handleResume() {
-  if (document.hidden) return;
-  if (Number.isFinite(countdownEndAtMs)) {
-    const immediateRemaining = (countdownEndAtMs - Date.now()) / 1000;
-    updateDisplay(immediateRemaining, currentState);
+async function reviseCountdown() {
+  if (!countdownElements.reviseButton) return;
+
+  countdownElements.reviseButton.disabled = true;
+
+  if (countdownElements.info) {
+    countdownElements.info.textContent = '正在向 Worker 重新校正倒數…';
   }
-  startLocalCountdown();
-  loadCountdown();
+
+  try {
+    await loadCountdown();
+  } finally {
+    countdownElements.reviseButton.disabled = false;
+  }
 }
 
-document.addEventListener('visibilitychange', () => {
+
+// ===================================================
+// 13. 記錄 GREEN / RED 訊號事件
+// ===================================================
+
+const signalChoice = document.querySelector('[data-signal-choice]');
+const signalResult = document.querySelector('[data-signal-result]');
+const signalStateButtons = document.querySelectorAll('[data-signal-state]');
+
+elements.signalButton.addEventListener('click', () => {
+  if (!latestPosition || !targetRoad) {
+    if (signalResult) signalResult.textContent = '尚未取得 GPS 位置。';
+    if (signalChoice) signalChoice.hidden = false;
+    return;
+  }
+
+  const roadPosition = { latitude: targetRoad.latitude, longitude: targetRoad.longitude };
+  const userPosition = { latitude: latestPosition.latitude, longitude: latestPosition.longitude };
+
+  const distance = distanceMeters(userPosition, roadPosition);
+  const radius = Number(targetRoad.radius) || 100;
+
+  if (distance > radius) {
+    if (signalResult) signalResult.textContent = `目前距離 LSK001 ${distance.toFixed(1)} 米，超過 ${radius} 米範圍。`;
+    if (signalChoice) signalChoice.hidden = false;
+    return;
+  }
+
+  if (signalResult) signalResult.textContent = '請選擇剛才的燈號。';
+  if (signalChoice) signalChoice.hidden = false;
+});
+
+signalStateButtons.forEach((button) => {
+  button.addEventListener('click', async () => {
+    if (!latestPosition || !targetRoad) {
+      if (signalResult) signalResult.textContent = '尚未取得 GPS 位置。';
+      return;
+    }
+
+    const state = button.dataset.signalState;
+    const roadPosition = { latitude: targetRoad.latitude, longitude: targetRoad.longitude };
+    const userPosition = { latitude: latestPosition.latitude, longitude: latestPosition.longitude };
+
+    const distance = distanceMeters(userPosition, roadPosition);
+    const radius = Number(targetRoad.radius) || 100;
+
+    if (distance > radius) {
+      if (signalResult) signalResult.textContent = `目前距離 ${distance.toFixed(1)} 米，已超出 ${radius} 米範圍。`;
+      return;
+    }
+
+    signalStateButtons.forEach((item) => { item.disabled = true; });
+    if (signalResult) signalResult.textContent = `正在記錄 ${state === 'GREEN' ? '🟢 轉綠' : '🔴 轉紅'}…`;
+
+    try {
+      const response = await fetch(`${WORKER_API}/api/signal-events`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          road_id: targetRoad.road_id,
+          state,
+          latitude: latestPosition.latitude,
+          longitude: latestPosition.longitude,
+          accuracy: latestPosition.accuracy,
+          distance_m: distance
+        })
+      });
+
+      const data = await response.json();
+
+      if (!response.ok || !data.ok) {
+        throw new Error(data.message || data.error || `HTTP ${response.status}`);
+      }
+
+      if (signalResult) {
+        signalResult.textContent = `✅ 已記錄 ${state === 'GREEN' ? '🟢 轉綠' : '🔴 轉紅'}（事件 ID：${data.event.id}）`;
+      }
+
+      signalStateButtons.forEach((item) => { item.disabled = false; });
+      await loadCountdown();
+    } catch (error) {
+      console.error('訊號事件記錄失敗：', error);
+      if (signalResult) signalResult.textContent = `❌ 記錄失敗：${error.message}`;
+      signalStateButtons.forEach((item) => { item.disabled = false; });
+    }
+  });
+});
+
+
+// ===================================================
+// 14. 倒數控制按鈕
+// ===================================================
+
+if (countdownElements.reviseButton) {
+  countdownElements.reviseButton.addEventListener('click', () => { reviseCountdown(); });
+}
+
+if (countdownElements.stopButton) {
+  countdownElements.stopButton.addEventListener('click', () => { stopCountdownForUser(); });
+}
+
+
+// ===================================================
+// 15. PWA 前景／背景自動重新校正
+// ===================================================
+
+document.addEventListener('visibilitychange', async () => {
   if (document.hidden) {
-    stopLocalCountdown();
+    stopCountdownTimer();
+    console.log('LSK001 PWA 已進入背景，暫停本地倒數 Timer。');
   } else {
-    handleResume();
+    console.log('LSK001 PWA 返回前景，立即向 Worker 重新校正倒數…');
+    try {
+      await loadCountdown();
+    } catch (error) {
+      console.error('LSK001 返回前景重新校正失敗：', error);
+    }
   }
 });
 
-window.addEventListener('pageshow', (event) => {
-  if (event.persisted) handleResume();
-});
 
-window.addEventListener('focus', () => {
-  handleResume();
-});
+// ===================================================
+// 16. 初始化
+// ===================================================
 
-// 初始化執行
-initGPS();
-loadCountdown();
-</script>
+async function init() {
+  try {
+    await loadRoads();
+    startGPS();
+    await loadCountdown();
+  } catch (error) {
+    console.error('LSK001 初始化失敗：', error);
+    elements.status.textContent = '無法取得 LSK001 道路資料。';
+    elements.distance.textContent = '無法計算';
+    elements.accuracy.textContent = '無法取得';
+  }
+}
 
-</body>
-</html>
+init();
