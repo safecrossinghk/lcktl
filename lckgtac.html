@@ -110,6 +110,7 @@ const landmarks=[
  {name:'長順街一帶',pos:[22.33495,114.15005],desc:'長順街附近示意點'}
 ];
 const landmarkLayer=L.layerGroup().addTo(map);
+landmarkLayer.addTo(map);
 landmarks.forEach(spot=>{
  const pin=L.divIcon({className:'',html:'<div class="landmark-pin"><span>◆</span>'+spot.name+'</div>',iconSize:[120,30],iconAnchor:[60,15]});
  L.marker(spot.pos,{icon:pin}).addTo(landmarkLayer).bindPopup('<b>'+spot.name+'</b><br>'+spot.desc+'<br><small>自由探索 · 示意點</small>')
