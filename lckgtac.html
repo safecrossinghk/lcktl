@@ -18,7 +18,7 @@
 /* GTA-inspired HUD layer */
 .game-hud{position:absolute;inset:0;z-index:850;pointer-events:none;color:#fff;text-shadow:0 2px 3px #000}
 .mission{position:absolute;top:92px;left:14px;width:min(245px,58vw);padding:11px 13px;background:linear-gradient(110deg,#111b2bea,#07111edb);border-left:4px solid #ffd34d;border-radius:3px 12px 12px 3px;box-shadow:0 5px 20px #0008}
-.mission .eyebrow{font-size:9px;letter-spacing:1.7px;color:#ffd34d;font-weight:900}.mission strong{display:block;font-size:13px;margin-top:5px}.mission p{font-size:10px;color:#d0d8e2;margin:5px 0 0;line-height:1.4}
+.mission .eyebrow{font-size:9px;letter-spacing:1.7px;color:#ffd34d;font-weight:900}.mission strong{display:block;font-size:13px;margin-top:5px}.mission p{font-size:10px;color:#d0d8e2;margin:5px 0 0;line-height:1.4}.mission-destination{margin-top:8px;padding:7px 8px;border:1px solid #38d9ff70;border-radius:7px;background:#07111edb;color:#38d9ff;font-size:10px;font-weight:800;line-height:1.45}.mission-destination.arrived{border-color:#43f59b;color:#43f59b}
 .game-stats{position:absolute;top:92px;right:14px;display:flex;flex-direction:column;align-items:flex-end;gap:7px}
 .stat-pill{background:#07111ee8;border:1px solid #ffffff35;border-radius:7px;padding:7px 10px;font-size:10px;font-weight:800;letter-spacing:.5px}
 .wanted{color:#ffd34d;font-size:15px;letter-spacing:2px}
@@ -54,7 +54,7 @@
 <div class="topbar"><div class="brand">荔枝角 GTA <span style="color:var(--cyan)">／ LSK001</span></div><div class="sub">REAL MAP · 手機互動測試版　<span class="live">● 示範模式</span></div></div>
 
 <div class="game-hud" aria-hidden="false">
-  <div class="mission"><div class="eyebrow">SIDE MISSION · LCK</div><strong id="missionTitle">LSK001 路口探索</strong><p id="missionText">前往標記位置，完成街區探索任務</p></div>
+  <div class="mission"><div class="eyebrow">SIDE MISSION · LCK</div><strong id="missionTitle">LSK001 路口探索</strong><p id="missionText">前往標記位置，完成街區探索任務</p><div class="mission-destination" id="destinationHud">目的地：LSK001 路口 · 距離計算中</div></div>
   <div class="game-stats"><div class="stat-pill">區域　荔枝角</div><div class="stat-pill wanted">★ ★ ★ ☆ ☆</div><div class="stat-pill">MODE: FREE ROAM</div></div>
   <div class="objective" id="objectiveText">◆ OBJECTIVE　前往 LSK001</div>
   <div class="bottom-hud"><div class="mini-badge"><b>街區雷達</b><div class="radar"></div><span>示意 HUD · 非導航</span></div><button class="game-action" id="hudCenter" aria-label="定位 LSK001">◎</button></div>
@@ -119,17 +119,23 @@ landmarks.forEach((spot,index)=>{
  const pin=L.divIcon({className:'',html,iconSize:[150,34],iconAnchor:[75,17]});
  const marker=L.marker(spot.pos,{icon:pin,pane:'landmarkPane',zIndexOffset:2000+index,keyboard:true}).addTo(map);
  marker.bindPopup('<b>'+spot.name+'</b><br>'+spot.desc+'<br><small>自由探索 · 位置請以真實底圖核對</small>');
- marker.on('click',()=>{player.setLatLng(spot.pos);map.flyTo(spot.pos,18,{duration:.45});updateExploreStatus();});
+ marker.on('click',()=>{selectedDestination=spot;player.setLatLng(spot.pos);map.flyTo(spot.pos,18,{duration:.45});updateExploreStatus();document.getElementById('missionTitle').textContent='自由探索：'+spot.name;document.getElementById('missionText').textContent='已選擇目的地。可繼續使用方向鍵探索附近街道。';document.getElementById('objectiveText').textContent='✓ 目的地已選擇 · '+spot.name;});
 });
 
 let missionComplete=false;
+let selectedDestination=landmarks[0];
 map.setView(playerStart,17);
 let moveDirection=null;
 let moveTimer=null;
 function updateExploreStatus(){
  const p=player.getLatLng();
  const distance=map.distance(target,p);
- document.getElementById('exploreStatus').textContent='自由探索：距 LSK001 '+Math.round(distance)+' 米 · 地標 '+landmarks.length+' 個';
+ const destinationDistance=map.distance(selectedDestination.pos,p);
+ const destinationHud=document.getElementById('destinationHud');
+ const arrived=destinationDistance<=12;
+ destinationHud.textContent=(arrived?'✓ 已抵達：':'目的地：')+selectedDestination.name+' · '+(arrived?'0':Math.round(destinationDistance))+' 米';
+ destinationHud.classList.toggle('arrived',arrived);
+ document.getElementById('exploreStatus').textContent='自由探索：距 LSK001 '+Math.round(distance)+' 米 · 目的地 '+Math.round(destinationDistance)+' 米';
  document.getElementById('exploreStatus').style.color=distance<=260?'#43f59b':'#ffd36a';
 }
 function movePlayer(){
@@ -187,8 +193,8 @@ window.addEventListener('pointerup',stopMoving);
 
 const panel=document.getElementById('panel'),menu=document.getElementById('menuBtn');
 menu.addEventListener('click',()=>{panel.classList.toggle('hidden');menu.textContent=panel.classList.contains('hidden')?'☰':'×'});
-document.getElementById('centerBtn').addEventListener('click',()=>{player.setLatLng(playerStart);map.flyTo(playerStart,17,{duration:.6});updateExploreStatus();});
-document.getElementById('hudCenter').addEventListener('click',()=>{player.setLatLng(target);map.flyTo(target,17,{duration:.6});updateExploreStatus();});
+document.getElementById('centerBtn').addEventListener('click',()=>{selectedDestination=landmarks[0];player.setLatLng(playerStart);map.flyTo(playerStart,17,{duration:.6});updateExploreStatus();document.getElementById('missionTitle').textContent='LSK001 路口探索';document.getElementById('missionText').textContent='已回到起點，可以繼續自由探索。';document.getElementById('objectiveText').textContent='◆ OBJECTIVE　前往 LSK001';});
+document.getElementById('hudCenter').addEventListener('click',()=>{selectedDestination=landmarks[0];player.setLatLng(target);map.flyTo(target,17,{duration:.6});updateExploreStatus();document.getElementById('missionTitle').textContent='LSK001 路口探索';document.getElementById('missionText').textContent='已返回 LSK001，可以繼續自由探索。';document.getElementById('objectiveText').textContent='◆ OBJECTIVE　LSK001';});
 let shown=true;document.getElementById('crowdBtn').addEventListener('click',()=>{shown=!shown;if(shown)crowdLayer.addTo(map);else map.removeLayer(crowdLayer)});
 })();
 </script>
