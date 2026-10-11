@@ -32,6 +32,20 @@
 @media(max-height:700px){.mission{top:82px}.game-stats{top:82px}.objective{top:46%}}
 @media(min-width:760px){.mission{top:105px;left:20px}.game-stats{top:105px;right:350px}.bottom-hud{bottom:20px;left:20px}}
 
+
+/* Mobile top-down exploration controls */
+#menuBtn{bottom:calc(154px + env(safe-area-inset-bottom,0px));}
+.player-icon{width:30px;height:30px;border:3px solid #fff;border-radius:50%;background:#37d9ff;box-shadow:0 0 0 5px #37d9ff45,0 0 18px #37d9ff;display:flex;align-items:center;justify-content:center;color:#07111e;font-size:17px;font-weight:1000}
+.player-icon:after{content:"";position:absolute;top:-9px;left:8px;border-left:5px solid transparent;border-right:5px solid transparent;border-bottom:9px solid #fff}
+.explore-label{background:#07111eea;color:#43f59b;border:1px solid #43f59b;border-radius:5px;padding:4px 7px;font-size:10px;font-weight:800;white-space:nowrap}
+.move-pad{position:absolute;z-index:1100;right:14px;bottom:calc(20px + env(safe-area-inset-bottom,0px));width:142px;height:142px;pointer-events:none;filter:drop-shadow(0 5px 12px #0008)}
+.move-pad button{position:absolute;pointer-events:auto;touch-action:none;user-select:none;-webkit-user-select:none;width:46px;height:46px;border:1px solid #ffffffa8;border-radius:12px;background:linear-gradient(145deg,#1b4058f5,#071522f5);color:#fff;font-size:21px;font-weight:900;display:flex;align-items:center;justify-content:center}
+.move-pad button:active,.move-pad button.moving{background:linear-gradient(145deg,#38d9ff,#087eaa);color:#06131d}
+.move-pad [data-dir="up"]{left:48px;top:0}.move-pad [data-dir="left"]{left:0;top:48px}.move-pad [data-dir="right"]{right:0;top:48px}.move-pad [data-dir="down"]{left:48px;bottom:0}
+.move-caption{position:absolute;right:18px;bottom:calc(166px + env(safe-area-inset-bottom,0px));z-index:1090;background:#07111ee8;color:#fff;padding:5px 8px;border-radius:5px;font-size:9px;letter-spacing:1px;pointer-events:none}
+.explore-status{position:absolute;left:14px;bottom:calc(110px + env(safe-area-inset-bottom,0px));z-index:870;background:#07111ee8;border:1px solid #43f59b80;border-radius:7px;padding:7px 9px;font-size:10px;color:#43f59b;pointer-events:none}
+@media(min-width:760px){#menuBtn{bottom:22px}.move-pad{right:24px;bottom:24px}.move-caption{right:28px;bottom:180px}.explore-status{bottom:120px;left:20px}}
+
 </style>
 </head>
 <body>
@@ -55,6 +69,16 @@
 <div class="btns"><button id="centerBtn">回到 LSK001</button><button id="crowdBtn">顯示／隱藏人流</button></div>
 <div class="legend">底圖 © OpenStreetMap contributors · 交通燈即時倒數尚未接入。</div>
 </section>
+
+<div class="explore-status" id="exploreStatus">探索範圍：LSK001 周邊 120 米</div>
+<div class="move-caption">按住方向鍵移動</div>
+<div class="move-pad" id="movePad" aria-label="玩家方向控制">
+  <button type="button" data-dir="up" aria-label="向北">▲</button>
+  <button type="button" data-dir="left" aria-label="向西">◀</button>
+  <button type="button" data-dir="right" aria-label="向東">▶</button>
+  <button type="button" data-dir="down" aria-label="向南">▼</button>
+</div>
+
 <button id="menuBtn" aria-label="開啟控制台">☰</button>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
@@ -68,6 +92,52 @@ L.marker(target,{icon}).addTo(map).bindPopup('<b>LSK001 測試路口</b><br>荔�
 const crowdLayer=L.layerGroup().addTo(map);
 const demo=[ [22.33602,114.14870,'#ff5470'],[22.33536,114.14940,'#ffd34d'],[22.33593,114.14962,'#43f59b'],[22.33522,114.14882,'#b78cff'],[22.33620,114.14913,'#38d9ff'] ];
 demo.forEach(p=>L.circleMarker([p[0],p[1]],{radius:9,color:'#fff',weight:1,fillColor:p[2],fillOpacity:.88}).bindTooltip('人流：示範資料').addTo(crowdLayer));
+
+const playerStart=[target[0]-0.00018,target[1]-0.00004];
+const playerIcon=L.divIcon({className:'',html:'<div class="player-icon">▲</div>',iconSize:[30,30],iconAnchor:[15,15]});
+const player=L.marker(playerStart,{icon:playerIcon,zIndexOffset:1000}).addTo(map).bindTooltip('玩家位置',{direction:'top',offset:[0,-12]});
+const exploreCircle=L.circle(target,{radius:120,color:'#43f59b',weight:2,opacity:.8,fillColor:'#43f59b',fillOpacity:.06,dashArray:'6 7'}).addTo(map);
+map.setView(playerStart,17);
+let moveDirection=null;
+let moveTimer=null;
+function movePlayer(){
+  if(!moveDirection)return;
+  const p=player.getLatLng();
+  const meters=2.2;
+  const latStep=meters/111320;
+  const lngStep=meters/(111320*Math.cos(p.lat*Math.PI/180));
+  let lat=p.lat,lng=p.lng;
+  if(moveDirection==='up')lat+=latStep;
+  if(moveDirection==='down')lat-=latStep;
+  if(moveDirection==='left')lng-=lngStep;
+  if(moveDirection==='right')lng+=lngStep;
+  const next=L.latLng(lat,lng);
+  player.setLatLng(next);
+  map.panTo(next,{animate:false});
+  const distance=map.distance(target,next);
+  document.getElementById('exploreStatus').textContent='探索範圍：距 LSK001 '+Math.round(distance)+' 米';
+  document.getElementById('exploreStatus').style.color=distance<=120?'#43f59b':'#ffd36a';
+}
+function stopMoving(){
+  moveDirection=null;
+  if(moveTimer){clearInterval(moveTimer);moveTimer=null;}
+  document.querySelectorAll('.move-pad button').forEach(b=>b.classList.remove('moving'));
+}
+document.querySelectorAll('.move-pad button').forEach(button=>{
+  button.addEventListener('pointerdown',event=>{
+    event.preventDefault();
+    stopMoving();
+    moveDirection=button.dataset.dir;
+    button.classList.add('moving');
+    movePlayer();
+    moveTimer=setInterval(movePlayer,140);
+  });
+  button.addEventListener('pointerup',stopMoving);
+  button.addEventListener('pointercancel',stopMoving);
+  button.addEventListener('lostpointercapture',stopMoving);
+});
+window.addEventListener('pointerup',stopMoving);
+
 const panel=document.getElementById('panel'),menu=document.getElementById('menuBtn');
 menu.addEventListener('click',()=>{panel.classList.toggle('hidden');menu.textContent=panel.classList.contains('hidden')?'☰':'×'});
 document.getElementById('centerBtn').addEventListener('click',()=>map.flyTo(target,17,{duration:.6}));
