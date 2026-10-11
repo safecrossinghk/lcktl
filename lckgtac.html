@@ -31,7 +31,8 @@
 .game-action{pointer-events:auto;width:54px;height:54px;border-radius:50%;border:2px solid #ffffffa8;background:linear-gradient(145deg,#38d9ff,#087eaa);box-shadow:0 0 0 5px #38d9ff2c,0 6px 18px #0008;color:#03121b;font-weight:1000;font-size:19px}
 @media(max-height:700px){.mission{top:82px}.game-stats{top:82px}.objective{top:46%}}
 @media(min-width:760px){.mission{top:105px;left:20px}.game-stats{top:105px;right:350px}.bottom-hud{bottom:20px;left:20px}}
-\n</style>
+
+</style>
 </head>
 <body>
 <div id="map" aria-label="荔枝角地圖"></div>
@@ -43,7 +44,8 @@
   <div class="objective">◆ OBJECTIVE　前往 LSK001</div>
   <div class="bottom-hud"><div class="mini-badge"><b>街區雷達</b><div class="radar"></div><span>示意 HUD · 非導航</span></div><button class="game-action" id="hudCenter" aria-label="定位 LSK001">◎</button></div>
 </div>
-\n<section id="panel" class="panel">
+
+<section id="panel" class="panel">
 <h2>📍 LSK001 路口控制台</h2>
 <div class="line"><span>測試位置</span><b>荔枝角道東行 × 長荔街</b></div>
 <div class="line"><span>地圖中心</span><b>LSK001</b></div>
@@ -68,7 +70,8 @@ const demo=[ [22.33602,114.14870,'#ff5470'],[22.33536,114.14940,'#ffd34d'],[22.3
 demo.forEach(p=>L.circleMarker([p[0],p[1]],{radius:9,color:'#fff',weight:1,fillColor:p[2],fillOpacity:.88}).bindTooltip('人流：示範資料').addTo(crowdLayer));
 const panel=document.getElementById('panel'),menu=document.getElementById('menuBtn');
 menu.addEventListener('click',()=>{panel.classList.toggle('hidden');menu.textContent=panel.classList.contains('hidden')?'☰':'×'});
-document.getElementById('centerBtn').addEventListener('click',()=>map.flyTo(target,17,{duration:.6}));\ndocument.getElementById('hudCenter').addEventListener('click',()=>map.flyTo(target,17,{duration:.6}));
+document.getElementById('centerBtn').addEventListener('click',()=>map.flyTo(target,17,{duration:.6}));
+document.getElementById('hudCenter').addEventListener('click',()=>map.flyTo(target,17,{duration:.6}));
 let shown=true;document.getElementById('crowdBtn').addEventListener('click',()=>{shown=!shown;if(shown)crowdLayer.addTo(map);else map.removeLayer(crowdLayer)});
 })();
 </script>
