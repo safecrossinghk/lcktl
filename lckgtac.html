@@ -39,6 +39,7 @@
 .player-icon:after{content:"";position:absolute;top:-9px;left:8px;border-left:5px solid transparent;border-right:5px solid transparent;border-bottom:9px solid #fff}
 .explore-label{background:#07111eea;color:#43f59b;border:1px solid #43f59b;border-radius:5px;padding:4px 7px;font-size:10px;font-weight:800;white-space:nowrap}
 .landmark-pin{background:#101d2def;border:1px solid #ffd34d;color:#fff;border-radius:8px;padding:6px 8px;font-size:10px;font-weight:800;white-space:nowrap;box-shadow:0 3px 12px #0008}.landmark-pin span{color:#ffd34d;margin-right:4px}.landmark-note{font-size:9px;color:#ffd36a;margin-top:6px;line-height:1.4}
+.explore-complete{position:absolute;inset:0;z-index:2000;display:none;align-items:center;justify-content:center;padding:22px;background:#020812b8;backdrop-filter:blur(5px);pointer-events:auto}.explore-complete.show{display:flex;animation:completeFade .25s ease-out}.complete-card{width:min(340px,100%);padding:24px 20px;text-align:center;background:linear-gradient(145deg,#14283a,#07111e);border:2px solid #43f59b;border-radius:18px;box-shadow:0 0 0 7px #43f59b22,0 0 36px #43f59b55;color:#fff}.complete-icon{font-size:42px;color:#43f59b;text-shadow:0 0 20px #43f59b88}.complete-card h2{margin:8px 0;font-size:22px;letter-spacing:1px}.complete-card p{font-size:12px;line-height:1.6;color:#c6d5e4}.complete-count{font-size:13px;font-weight:900;color:#ffd34d;margin:14px 0}.complete-card button{width:100%;border:1px solid #43f59b;border-radius:10px;background:#12382d;color:#fff;padding:12px;font-weight:900}@keyframes completeFade{from{opacity:0;transform:scale(.96)}to{opacity:1;transform:scale(1)}}
 .move-pad{position:absolute;z-index:1100;right:14px;bottom:calc(20px + env(safe-area-inset-bottom,0px));width:142px;height:142px;pointer-events:none;filter:drop-shadow(0 5px 12px #0008)}
 .move-pad button{position:absolute;pointer-events:auto;touch-action:none;user-select:none;-webkit-user-select:none;width:46px;height:46px;border:1px solid #ffffffa8;border-radius:12px;background:linear-gradient(145deg,#1b4058f5,#071522f5);color:#fff;font-size:21px;font-weight:900;display:flex;align-items:center;justify-content:center}
 .move-pad button:active,.move-pad button.moving{background:linear-gradient(145deg,#38d9ff,#087eaa);color:#06131d}
@@ -75,6 +76,7 @@
 </section>
 
 <div class="explore-status" id="exploreStatus">探索範圍：LSK001 周邊 120 米</div>
+<div class="explore-complete" id="exploreComplete" role="dialog" aria-modal="true" aria-labelledby="completeTitle"><div class="complete-card"><div class="complete-icon">★</div><div class="eyebrow" style="color:#43f59b;font-size:10px;letter-spacing:2px;font-weight:900">DISTRICT EXPLORED</div><h2 id="completeTitle">街區探索完成！</h2><p>你已到訪全部六個探索地標。荔枝角街區探索任務已完成，現在仍可繼續自由探索。</p><div class="complete-count">探索地標　6 / 6　 ·　 BONUS UNLOCKED</div><button id="closeComplete" type="button">繼續自由探索</button></div></div>
 <div class="move-caption">按住方向鍵移動</div>
 <div class="move-pad" id="movePad" aria-label="玩家方向控制">
   <button type="button" data-dir="up" aria-label="向北">▲</button>
@@ -112,6 +114,7 @@ const landmarks=[
 const landmarkLayer=L.layerGroup().addTo(map);
 const visitedLandmarks=new Set();
 const landmarkMarkers=new Map();
+let completionShown=false;
 function markLandmarkVisited(spot){
  if(visitedLandmarks.has(spot.name))return;
  visitedLandmarks.add(spot.name);
@@ -120,6 +123,11 @@ function markLandmarkVisited(spot){
   const visitedHtml='<div style="display:inline-block;background:#0d2b25;border:3px solid #43f59b;color:#fff;border-radius:8px;padding:7px 9px;font-size:12px;font-weight:900;white-space:nowrap;box-shadow:0 0 0 3px #43f59b55,0 3px 14px #000c;line-height:1.2"><span style="color:#43f59b;margin-right:5px">✓</span>'+spot.name+' · 已探索</div>';
   item.marker.setIcon(L.divIcon({className:'',html:visitedHtml,iconSize:[170,34],iconAnchor:[85,17]}));
   item.marker.setPopupContent('<b>✓ 已探索：'+spot.name+'</b><br>'+spot.desc+'<br><small>已記錄到訪 · 自由探索</small>');
+ }
+ if(visitedLandmarks.size===landmarks.length&&!completionShown){
+  completionShown=true;
+  document.getElementById('landmarkProgress').textContent='探索地標 '+landmarks.length+'/'+landmarks.length+' ✓';
+  document.getElementById('exploreComplete').classList.add('show');
  }
 }
 landmarkLayer.addTo(map);
@@ -208,6 +216,7 @@ document.querySelectorAll('.move-pad button').forEach(button=>{
 });
 window.addEventListener('pointerup',stopMoving);
 
+document.getElementById('closeComplete').addEventListener('click',()=>document.getElementById('exploreComplete').classList.remove('show'));
 const panel=document.getElementById('panel'),menu=document.getElementById('menuBtn');
 menu.addEventListener('click',()=>{panel.classList.toggle('hidden');menu.textContent=panel.classList.contains('hidden')?'☰':'×'});
 document.getElementById('centerBtn').addEventListener('click',()=>{selectedDestination=landmarks[0];player.setLatLng(playerStart);map.flyTo(playerStart,17,{duration:.6});updateExploreStatus();document.getElementById('missionTitle').textContent='LSK001 路口探索';document.getElementById('missionText').textContent='已回到起點，可以繼續自由探索。';document.getElementById('objectiveText').textContent='◆ OBJECTIVE　前往 LSK001';});
