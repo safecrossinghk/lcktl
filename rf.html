@@ -1,0 +1,1232 @@
+<!DOCTYPE html>
+<html lang="zh-HK">
+<head>
+  <meta charset="UTF-8">
+
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1, viewport-fit=cover"
+  >
+
+  <meta name="theme-color" content="#111827">
+
+  <title>RF Environment HK｜Android 網絡環境實驗版</title>
+
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      padding: 0;
+      background: #f3f4f6;
+      color: #111827;
+      font-family:
+        -apple-system,
+        BlinkMacSystemFont,
+        "Segoe UI",
+        Roboto,
+        "Noto Sans TC",
+        Arial,
+        sans-serif;
+    }
+
+    header {
+      background: #111827;
+      color: white;
+      padding:
+        calc(env(safe-area-inset-top) + 18px)
+        18px
+        18px;
+    }
+
+    header h1 {
+      margin: 0 0 6px;
+      font-size: 22px;
+      line-height: 1.3;
+    }
+
+    header p {
+      margin: 0;
+      font-size: 13px;
+      opacity: 0.8;
+      line-height: 1.5;
+    }
+
+    main {
+      max-width: 700px;
+      margin: 0 auto;
+      padding: 16px;
+      padding-bottom: 40px;
+    }
+
+    .notice {
+      background: #fff7ed;
+      border: 1px solid #fed7aa;
+      border-radius: 14px;
+      padding: 14px;
+      margin-bottom: 14px;
+      font-size: 13px;
+      line-height: 1.6;
+    }
+
+    .notice strong {
+      display: block;
+      margin-bottom: 4px;
+    }
+
+    .control-panel {
+      background: white;
+      border-radius: 16px;
+      padding: 16px;
+      margin-bottom: 14px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+    }
+
+    .buttons {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+
+    button {
+      border: 0;
+      border-radius: 12px;
+      padding: 14px 10px;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    #startBtn {
+      background: #16a34a;
+      color: white;
+    }
+
+    #stopBtn {
+      background: #dc2626;
+      color: white;
+    }
+
+    button:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+
+    .status {
+      margin-top: 12px;
+      padding: 10px 12px;
+      border-radius: 10px;
+      background: #f3f4f6;
+      font-size: 13px;
+    }
+
+    .status.running {
+      background: #dcfce7;
+      color: #166534;
+    }
+
+    .status.stopped {
+      background: #fee2e2;
+      color: #991b1b;
+    }
+
+    .section-title {
+      font-size: 15px;
+      font-weight: 700;
+      margin: 20px 0 10px;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+
+    .card {
+      background: white;
+      border-radius: 14px;
+      padding: 14px;
+      min-height: 92px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+    }
+
+    .card-label {
+      font-size: 12px;
+      color: #6b7280;
+      margin-bottom: 7px;
+    }
+
+    .card-value {
+      font-size: 20px;
+      font-weight: 700;
+      word-break: break-word;
+    }
+
+    .card-small {
+      font-size: 12px;
+      color: #6b7280;
+      margin-top: 4px;
+      line-height: 1.4;
+    }
+
+    .score-card {
+      background: white;
+      border-radius: 16px;
+      padding: 18px;
+      margin-top: 10px;
+      text-align: center;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+    }
+
+    .score {
+      font-size: 42px;
+      font-weight: 800;
+      margin: 8px 0;
+    }
+
+    .score-text {
+      font-size: 13px;
+      color: #6b7280;
+      line-height: 1.5;
+    }
+
+    .log {
+      background: #111827;
+      color: #d1d5db;
+      border-radius: 14px;
+      padding: 12px;
+      font-family: monospace;
+      font-size: 11px;
+      line-height: 1.6;
+      max-height: 260px;
+      overflow-y: auto;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    .bottom-buttons {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-top: 12px;
+    }
+
+    #downloadBtn {
+      background: #2563eb;
+      color: white;
+    }
+
+    #clearBtn {
+      background: #6b7280;
+      color: white;
+    }
+
+    .footer-note {
+      margin-top: 18px;
+      font-size: 11px;
+      color: #6b7280;
+      line-height: 1.6;
+    }
+
+    @media (max-width: 420px) {
+      .grid {
+        grid-template-columns: 1fr 1fr;
+      }
+
+      .card-value {
+        font-size: 18px;
+      }
+    }
+  </style>
+</head>
+
+<body>
+
+<header>
+  <h1>RF Environment HK</h1>
+  <p>Android 網絡環境實驗版 v1.0</p>
+</header>
+
+<main>
+
+  <div class="notice">
+    <strong>⚠️ 實驗定位</strong>
+    本網站目前不是警方或 RF 偵測器。
+    第一階段只測試 Android 瀏覽器可以取得的 GPS、
+    網絡狀態及連線環境資料，研究這些資料是否會出現可重複的環境變化。
+  </div>
+
+  <div class="control-panel">
+
+    <div class="buttons">
+      <button id="startBtn">▶ 開始收集</button>
+      <button id="stopBtn" disabled>■ 停止收集</button>
+    </div>
+
+    <div id="status" class="status stopped">
+      尚未開始收集資料
+    </div>
+
+  </div>
+
+
+  <div class="section-title">📍 GPS</div>
+
+  <div class="grid">
+
+    <div class="card">
+      <div class="card-label">Latitude</div>
+      <div id="latitude" class="card-value">—</div>
+    </div>
+
+    <div class="card">
+      <div class="card-label">Longitude</div>
+      <div id="longitude" class="card-value">—</div>
+    </div>
+
+    <div class="card">
+      <div class="card-label">GPS Accuracy</div>
+      <div id="accuracy" class="card-value">—</div>
+      <div class="card-small">米</div>
+    </div>
+
+    <div class="card">
+      <div class="card-label">Speed</div>
+      <div id="speed" class="card-value">—</div>
+      <div class="card-small">km/h</div>
+    </div>
+
+  </div>
+
+
+  <div class="section-title">📶 網絡環境</div>
+
+  <div class="grid">
+
+    <div class="card">
+      <div class="card-label">Online</div>
+      <div id="online" class="card-value">—</div>
+    </div>
+
+    <div class="card">
+      <div class="card-label">Connection Type</div>
+      <div id="connectionType" class="card-value">—</div>
+    </div>
+
+    <div class="card">
+      <div class="card-label">Effective Type</div>
+      <div id="effectiveType" class="card-value">—</div>
+    </div>
+
+    <div class="card">
+      <div class="card-label">Downlink</div>
+      <div id="downlink" class="card-value">—</div>
+      <div class="card-small">Mbps</div>
+    </div>
+
+    <div class="card">
+      <div class="card-label">RTT</div>
+      <div id="rtt" class="card-value">—</div>
+      <div class="card-small">ms</div>
+    </div>
+
+    <div class="card">
+      <div class="card-label">Save Data</div>
+      <div id="saveData" class="card-value">—</div>
+    </div>
+
+  </div>
+
+
+  <div class="section-title">📊 網絡環境變化指標</div>
+
+  <div class="score-card">
+
+    <div class="card-label">
+      不是「警方偵測分數」
+    </div>
+
+    <div id="score" class="score">
+      0
+    </div>
+
+    <div id="scoreText" class="score-text">
+      尚未收集足夠資料
+    </div>
+
+  </div>
+
+
+  <div class="section-title">📝 即時資料記錄</div>
+
+  <div id="log" class="log">
+尚未開始。
+  </div>
+
+
+  <div class="bottom-buttons">
+
+    <button id="downloadBtn">
+      ⬇️ 下載 CSV
+    </button>
+
+    <button id="clearBtn">
+      🗑 清除資料
+    </button>
+
+  </div>
+
+
+  <div class="footer-note">
+
+    本實驗不讀取通訊內容、不嘗試解碼任何私人或專業無線電通訊，
+    亦不會嘗試識別任何人士。
+    純 PWA 無法被動掃描附近 Wi-Fi / Bluetooth 裝置，
+    也不能直接取得手機蜂窩網絡 RSSI 或 Cell ID。
+
+  </div>
+
+</main>
+
+
+<script>
+
+  // =========================================================
+  // RF Environment HK
+  // Android 網絡環境實驗版
+  // =========================================================
+
+  let collecting = false;
+  let watchId = null;
+  let sampleTimer = null;
+
+  let samples = [];
+
+  let latestGPS = {
+    latitude: null,
+    longitude: null,
+    accuracy: null,
+    speed: null
+  };
+
+  let previousNetwork = null;
+  let networkChanges = 0;
+
+
+  const $ = (id) => document.getElementById(id);
+
+
+  // ---------------------------------------------------------
+  // 基本 UI
+  // ---------------------------------------------------------
+
+  function setStatus(text, type) {
+
+    const el = $("status");
+
+    el.textContent = text;
+
+    el.className = "status " + (type || "");
+
+  }
+
+
+  function addLog(text) {
+
+    const log = $("log");
+
+    const now = new Date();
+
+    const time =
+      now.toLocaleTimeString("zh-HK", {
+        hour12: false
+      });
+
+    log.textContent =
+      "[" + time + "] " + text + "\n" + log.textContent;
+
+  }
+
+
+  // ---------------------------------------------------------
+  // GPS
+  // ---------------------------------------------------------
+
+  function startGPS() {
+
+    if (!navigator.geolocation) {
+
+      addLog("❌ 此瀏覽器不支援 GPS");
+
+      return;
+
+    }
+
+
+    watchId =
+      navigator.geolocation.watchPosition(
+
+        (position) => {
+
+          const c = position.coords;
+
+
+          latestGPS.latitude =
+            Number(c.latitude.toFixed(7));
+
+          latestGPS.longitude =
+            Number(c.longitude.toFixed(7));
+
+          latestGPS.accuracy =
+            c.accuracy != null
+              ? Number(c.accuracy.toFixed(1))
+              : null;
+
+
+          let speedKmh = null;
+
+
+          if (
+            c.speed != null &&
+            Number.isFinite(c.speed) &&
+            c.speed >= 0
+          ) {
+
+            speedKmh =
+              Number((c.speed * 3.6).toFixed(2));
+
+          }
+
+
+          latestGPS.speed = speedKmh;
+
+
+          $("latitude").textContent =
+            latestGPS.latitude ?? "—";
+
+          $("longitude").textContent =
+            latestGPS.longitude ?? "—";
+
+
+          $("accuracy").textContent =
+            latestGPS.accuracy != null
+              ? latestGPS.accuracy
+              : "—";
+
+
+          $("speed").textContent =
+            latestGPS.speed != null
+              ? latestGPS.speed
+              : "—";
+
+        },
+
+        (error) => {
+
+          addLog(
+            "⚠️ GPS error: " +
+            error.message
+          );
+
+        },
+
+        {
+          enableHighAccuracy: true,
+          maximumAge: 0,
+          timeout: 10000
+        }
+
+      );
+
+  }
+
+
+  // ---------------------------------------------------------
+  // Network Information API
+  // ---------------------------------------------------------
+
+  function getNetworkInfo() {
+
+    const connection =
+      navigator.connection ||
+      navigator.mozConnection ||
+      navigator.webkitConnection;
+
+
+    const online =
+      navigator.onLine;
+
+
+    $("online").textContent =
+      online ? "YES" : "NO";
+
+
+    if (!connection) {
+
+      $("connectionType").textContent = "N/A";
+      $("effectiveType").textContent = "N/A";
+      $("downlink").textContent = "N/A";
+      $("rtt").textContent = "N/A";
+      $("saveData").textContent = "N/A";
+
+      return {
+        online,
+        connectionType: null,
+        effectiveType: null,
+        downlink: null,
+        rtt: null,
+        saveData: null
+      };
+
+    }
+
+
+    const data = {
+
+      online,
+
+      connectionType:
+        connection.type || null,
+
+      effectiveType:
+        connection.effectiveType || null,
+
+      downlink:
+        Number.isFinite(connection.downlink)
+          ? connection.downlink
+          : null,
+
+      rtt:
+        Number.isFinite(connection.rtt)
+          ? connection.rtt
+          : null,
+
+      saveData:
+        connection.saveData === true
+
+    };
+
+
+    $("connectionType").textContent =
+      data.connectionType || "N/A";
+
+
+    $("effectiveType").textContent =
+      data.effectiveType || "N/A";
+
+
+    $("downlink").textContent =
+      data.downlink != null
+        ? data.downlink
+        : "N/A";
+
+
+    $("rtt").textContent =
+      data.rtt != null
+        ? data.rtt
+        : "N/A";
+
+
+    $("saveData").textContent =
+      data.saveData ? "YES" : "NO";
+
+
+    return data;
+
+  }
+
+
+  // ---------------------------------------------------------
+  // 簡單環境變化指標
+  // ---------------------------------------------------------
+
+  function calculateScore(network) {
+
+    let score = 0;
+
+
+    if (!previousNetwork) {
+
+      previousNetwork = {
+        ...network
+      };
+
+      $("score").textContent = "0";
+
+      $("scoreText").textContent =
+        "正在建立第一個基準點";
+
+      return 0;
+
+    }
+
+
+    // Online / Offline 狀態改變
+    if (
+      network.online !==
+      previousNetwork.online
+    ) {
+
+      score += 35;
+
+    }
+
+
+    // Connection type 改變
+    if (
+      network.connectionType !==
+      previousNetwork.connectionType
+    ) {
+
+      score += 25;
+
+    }
+
+
+    // Effective type 改變
+    if (
+      network.effectiveType !==
+      previousNetwork.effectiveType
+    ) {
+
+      score += 20;
+
+    }
+
+
+    // RTT 大幅變化
+    if (
+      Number.isFinite(network.rtt) &&
+      Number.isFinite(previousNetwork.rtt)
+    ) {
+
+      const difference =
+        Math.abs(
+          network.rtt -
+          previousNetwork.rtt
+        );
+
+
+      if (difference >= 100) {
+
+        score += 20;
+
+      } else if (difference >= 50) {
+
+        score += 10;
+
+      }
+
+    }
+
+
+    // Downlink 大幅變化
+    if (
+      Number.isFinite(network.downlink) &&
+      Number.isFinite(previousNetwork.downlink) &&
+      previousNetwork.downlink > 0
+    ) {
+
+      const ratio =
+        Math.abs(
+          network.downlink -
+          previousNetwork.downlink
+        ) /
+        previousNetwork.downlink;
+
+
+      if (ratio >= 0.5) {
+
+        score += 15;
+
+      }
+
+    }
+
+
+    previousNetwork = {
+      ...network
+    };
+
+
+    // 上限 100
+    score =
+      Math.min(score, 100);
+
+
+    if (score === 0) {
+
+      $("scoreText").textContent =
+        "目前沒有明顯網絡環境變化";
+
+    } else if (score < 30) {
+
+      $("scoreText").textContent =
+        "輕微變化";
+
+    } else if (score < 60) {
+
+      $("scoreText").textContent =
+        "中等變化，值得記錄";
+
+    } else {
+
+      $("scoreText").textContent =
+        "較明顯變化，需要進一步觀察";
+
+    }
+
+
+    $("score").textContent =
+      String(score);
+
+
+    return score;
+
+  }
+
+
+  // ---------------------------------------------------------
+  // 收集一個 Sample
+  // ---------------------------------------------------------
+
+  function collectSample() {
+
+    if (!collecting) {
+      return;
+    }
+
+
+    const now = new Date();
+
+    const network =
+      getNetworkInfo();
+
+
+    const score =
+      calculateScore(network);
+
+
+    const sample = {
+
+      recorded_at:
+        now.toISOString(),
+
+      latitude:
+        latestGPS.latitude,
+
+      longitude:
+        latestGPS.longitude,
+
+      gps_accuracy_m:
+        latestGPS.accuracy,
+
+      speed_kmh:
+        latestGPS.speed,
+
+      online:
+        network.online,
+
+      connection_type:
+        network.connectionType,
+
+      effective_type:
+        network.effectiveType,
+
+      downlink_mbps:
+        network.downlink,
+
+      rtt_ms:
+        network.rtt,
+
+      save_data:
+        network.saveData,
+
+      environment_change_score:
+        score
+
+    };
+
+
+    samples.push(sample);
+
+
+    addLog(
+      JSON.stringify(sample)
+    );
+
+  }
+
+
+  // ---------------------------------------------------------
+  // 開始
+  // ---------------------------------------------------------
+
+  function startCollection() {
+
+    if (collecting) {
+      return;
+    }
+
+
+    samples = [];
+
+    previousNetwork = null;
+
+    networkChanges = 0;
+
+    collecting = true;
+
+
+    $("startBtn").disabled = true;
+
+    $("stopBtn").disabled = false;
+
+
+    setStatus(
+      "🟢 正在收集資料",
+      "running"
+    );
+
+
+    addLog(
+      "▶ 開始收集"
+    );
+
+
+    startGPS();
+
+
+    // 立即收集一次
+    collectSample();
+
+
+    // 每 2 秒收集一次
+    sampleTimer =
+      setInterval(
+        collectSample,
+        2000
+      );
+
+  }
+
+
+  // ---------------------------------------------------------
+  // 停止
+  // ---------------------------------------------------------
+
+  function stopCollection() {
+
+    collecting = false;
+
+
+    if (sampleTimer) {
+
+      clearInterval(
+        sampleTimer
+      );
+
+      sampleTimer = null;
+
+    }
+
+
+    if (watchId !== null) {
+
+      navigator.geolocation.clearWatch(
+        watchId
+      );
+
+      watchId = null;
+
+    }
+
+
+    $("startBtn").disabled = false;
+
+    $("stopBtn").disabled = true;
+
+
+    setStatus(
+      "🔴 已停止收集，共 " +
+      samples.length +
+      " 筆",
+      "stopped"
+    );
+
+
+    addLog(
+      "■ 停止收集，共 " +
+      samples.length +
+      " 筆"
+    );
+
+  }
+
+
+  // ---------------------------------------------------------
+  // CSV
+  // ---------------------------------------------------------
+
+  function csvEscape(value) {
+
+    if (value === null ||
+        value === undefined) {
+
+      return "";
+
+    }
+
+
+    const text =
+      String(value);
+
+
+    if (
+      text.includes(",") ||
+      text.includes('"') ||
+      text.includes("\n")
+    ) {
+
+      return '"' +
+        text.replace(/"/g, '""') +
+        '"';
+
+    }
+
+
+    return text;
+
+  }
+
+
+  function downloadCSV() {
+
+    if (samples.length === 0) {
+
+      alert(
+        "目前沒有資料可以下載。"
+      );
+
+      return;
+
+    }
+
+
+    const headers =
+      Object.keys(
+        samples[0]
+      );
+
+
+    const lines = [];
+
+
+    lines.push(
+      headers
+        .map(csvEscape)
+        .join(",")
+    );
+
+
+    for (const row of samples) {
+
+      lines.push(
+        headers
+          .map(
+            key =>
+              csvEscape(
+                row[key]
+              )
+          )
+          .join(",")
+      );
+
+    }
+
+
+    const csv =
+      "\uFEFF" +
+      lines.join("\n");
+
+
+    const blob =
+      new Blob(
+        [csv],
+        {
+          type:
+            "text/csv;charset=utf-8"
+        }
+      );
+
+
+    const url =
+      URL.createObjectURL(
+        blob
+      );
+
+
+    const a =
+      document.createElement("a");
+
+
+    const timestamp =
+      new Date()
+        .toISOString()
+        .replace(/[:.]/g, "-");
+
+
+    a.href = url;
+
+    a.download =
+      "rf-environment-" +
+      timestamp +
+      ".csv";
+
+
+    document.body.appendChild(a);
+
+    a.click();
+
+    a.remove();
+
+
+    URL.revokeObjectURL(
+      url
+    );
+
+  }
+
+
+  // ---------------------------------------------------------
+  // 清除
+  // ---------------------------------------------------------
+
+  function clearData() {
+
+    if (collecting) {
+
+      alert(
+        "請先停止收集資料。"
+      );
+
+      return;
+
+    }
+
+
+    samples = [];
+
+    previousNetwork = null;
+
+
+    $("log").textContent =
+      "資料已清除。";
+
+
+    $("score").textContent =
+      "0";
+
+
+    $("scoreText").textContent =
+      "尚未收集足夠資料";
+
+
+    setStatus(
+      "尚未開始收集資料",
+      "stopped"
+    );
+
+  }
+
+
+  // ---------------------------------------------------------
+  // Network change event
+  // ---------------------------------------------------------
+
+  window.addEventListener(
+    "online",
+    () => {
+
+      addLog(
+        "🌐 網絡恢復 Online"
+      );
+
+    }
+  );
+
+
+  window.addEventListener(
+    "offline",
+    () => {
+
+      addLog(
+        "⚠️ 網絡變成 Offline"
+      );
+
+    }
+  );
+
+
+  const connection =
+    navigator.connection ||
+    navigator.mozConnection ||
+    navigator.webkitConnection;
+
+
+  if (connection) {
+
+    connection.addEventListener(
+      "change",
+      () => {
+
+        addLog(
+          "📶 Network Information 發生變化"
+        );
+
+      }
+    );
+
+  }
+
+
+  // ---------------------------------------------------------
+  // Buttons
+  // ---------------------------------------------------------
+
+  $("startBtn").addEventListener(
+    "click",
+    startCollection
+  );
+
+
+  $("stopBtn").addEventListener(
+    "click",
+    stopCollection
+  );
+
+
+  $("downloadBtn").addEventListener(
+    "click",
+    downloadCSV
+  );
+
+
+  $("clearBtn").addEventListener(
+    "click",
+    clearData
+  );
+
+
+  // ---------------------------------------------------------
+  // 初始狀態
+  // ---------------------------------------------------------
+
+  getNetworkInfo();
+
+</script>
+
+</body>
+</html>
