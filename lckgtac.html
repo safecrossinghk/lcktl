@@ -71,7 +71,7 @@
 <div class="line"><span>人流圖層</span><b style="color:#ffd36a">示範資料</b></div>
 <div class="line"><span>交通燈倒數</span><b>尚未接入</b></div>
 <div class="note">⚠️ 人流圓點只作介面示範，並非即時人流、Google 數據或實際人數。地圖位置以底圖為準。</div>
-<div class="btns"><button id="centerBtn">回到 LSK001</button><button id="crowdBtn">顯示／隱藏人流</button></div>
+<div class="btns"><button id="centerBtn">回到 LSK001</button><button id="crowdBtn">顯示／隱藏人流</button></div><div class="btns"><button id="resetExploreBtn">重設探索進度</button></div>
 <div class="legend">底圖 © OpenStreetMap contributors · 交通燈即時倒數尚未接入。</div>
 </section>
 
@@ -114,10 +114,14 @@ const landmarks=[
 const landmarkLayer=L.layerGroup().addTo(map);
 const visitedLandmarks=new Set();
 const landmarkMarkers=new Map();
+const progressStorageKey="lckgtac_visited_landmarks_v1";
 let completionShown=false;
+function saveExploreProgress(){try{localStorage.setItem(progressStorageKey,JSON.stringify(Array.from(visitedLandmarks)));}catch(error){}}
+function loadExploreProgress(){try{const saved=JSON.parse(localStorage.getItem(progressStorageKey)||"[]");return Array.isArray(saved)?saved.filter(name=>landmarks.some(spot=>spot.name===name)):[];}catch(error){return [];}}
 function markLandmarkVisited(spot){
  if(visitedLandmarks.has(spot.name))return;
  visitedLandmarks.add(spot.name);
+ saveExploreProgress();
  const item=landmarkMarkers.get(spot.name);
  if(item){
   const visitedHtml='<div style="display:inline-block;background:#0d2b25;border:3px solid #43f59b;color:#fff;border-radius:8px;padding:7px 9px;font-size:12px;font-weight:900;white-space:nowrap;box-shadow:0 0 0 3px #43f59b55,0 3px 14px #000c;line-height:1.2"><span style="color:#43f59b;margin-right:5px">✓</span>'+spot.name+' · 已探索</div>';
@@ -142,6 +146,9 @@ landmarks.forEach((spot,index)=>{
  marker.bindPopup('<b>'+spot.name+'</b><br>'+spot.desc+'<br><small>自由探索 · 位置請以真實底圖核對</small>');
  marker.on('click',()=>{selectedDestination=spot;player.setLatLng(spot.pos);markLandmarkVisited(spot);map.flyTo(spot.pos,18,{duration:.45});updateExploreStatus();document.getElementById('missionTitle').textContent='自由探索：'+spot.name;document.getElementById('missionText').textContent='已選擇目的地。可繼續使用方向鍵探索附近街道。';document.getElementById('objectiveText').textContent='✓ 目的地已選擇 · '+spot.name;});
 });
+const savedVisited=loadExploreProgress();
+if(savedVisited.length===landmarks.length)completionShown=true;
+savedVisited.forEach(name=>{const spot=landmarks.find(item=>item.name===name);if(spot)markLandmarkVisited(spot);});
 
 let missionComplete=false;
 let selectedDestination=landmarks[0];
@@ -217,6 +224,22 @@ document.querySelectorAll('.move-pad button').forEach(button=>{
 window.addEventListener('pointerup',stopMoving);
 
 document.getElementById('closeComplete').addEventListener('click',()=>document.getElementById('exploreComplete').classList.remove('show'));
+document.getElementById('resetExploreBtn').addEventListener('click',()=>{
+ if(!window.confirm('確定重設全部地標探索進度？此操作不能復原。'))return;
+ visitedLandmarks.clear();completionShown=false;
+ try{localStorage.removeItem(progressStorageKey);}catch(error){}
+ landmarkMarkers.forEach(({marker,spot})=>{
+  const html='<div style="display:inline-block;background:#101d2d;border:2px solid #ffd34d;color:#fff;border-radius:8px;padding:7px 9px;font-size:12px;font-weight:900;white-space:nowrap;box-shadow:0 3px 14px #000c;line-height:1.2"><span style="color:#ffd34d;margin-right:5px">◆</span>'+spot.name+'</div>';
+  marker.setIcon(L.divIcon({className:'',html,iconSize:[150,34],iconAnchor:[75,17]}));
+  marker.setPopupContent('<b>'+spot.name+'</b><br>'+spot.desc+'<br><small>自由探索 · 位置請以真實底圖核對</small>');
+ });
+ document.getElementById('exploreComplete').classList.remove('show');
+ document.getElementById('landmarkProgress').textContent='探索地標 0/'+landmarks.length;
+ updateExploreStatus();
+ document.getElementById('missionTitle').textContent='LSK001 路口探索';
+ document.getElementById('missionText').textContent='探索進度已重設，可以重新開始。';
+ document.getElementById('objectiveText').textContent='◆ OBJECTIVE　重新探索六個地標';
+});
 const panel=document.getElementById('panel'),menu=document.getElementById('menuBtn');
 menu.addEventListener('click',()=>{panel.classList.toggle('hidden');menu.textContent=panel.classList.contains('hidden')?'☰':'×'});
 document.getElementById('centerBtn').addEventListener('click',()=>{selectedDestination=landmarks[0];player.setLatLng(playerStart);map.flyTo(playerStart,17,{duration:.6});updateExploreStatus();document.getElementById('missionTitle').textContent='LSK001 路口探索';document.getElementById('missionText').textContent='已回到起點，可以繼續自由探索。';document.getElementById('objectiveText').textContent='◆ OBJECTIVE　前往 LSK001';});
