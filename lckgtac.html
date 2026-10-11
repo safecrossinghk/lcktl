@@ -53,9 +53,9 @@
 <div class="topbar"><div class="brand">荔枝角 GTA <span style="color:var(--cyan)">／ LSK001</span></div><div class="sub">REAL MAP · 手機互動測試版　<span class="live">● 示範模式</span></div></div>
 
 <div class="game-hud" aria-hidden="false">
-  <div class="mission"><div class="eyebrow">SIDE MISSION · LCK</div><strong>LSK001 路口探索</strong><p>前往標記位置，探索荔枝角街區</p></div>
+  <div class="mission"><div class="eyebrow">SIDE MISSION · LCK</div><strong id="missionTitle">LSK001 路口探索</strong><p id="missionText">前往標記位置，完成街區探索任務</p></div>
   <div class="game-stats"><div class="stat-pill">區域　荔枝角</div><div class="stat-pill wanted">★ ★ ★ ☆ ☆</div><div class="stat-pill">MODE: FREE ROAM</div></div>
-  <div class="objective">◆ OBJECTIVE　前往 LSK001</div>
+  <div class="objective" id="objectiveText">◆ OBJECTIVE　前往 LSK001</div>
   <div class="bottom-hud"><div class="mini-badge"><b>街區雷達</b><div class="radar"></div><span>示意 HUD · 非導航</span></div><button class="game-action" id="hudCenter" aria-label="定位 LSK001">◎</button></div>
 </div>
 
@@ -93,10 +93,10 @@ const crowdLayer=L.layerGroup().addTo(map);
 const demo=[ [22.33602,114.14870,'#ff5470'],[22.33536,114.14940,'#ffd34d'],[22.33593,114.14962,'#43f59b'],[22.33522,114.14882,'#b78cff'],[22.33620,114.14913,'#38d9ff'] ];
 demo.forEach(p=>L.circleMarker([p[0],p[1]],{radius:9,color:'#fff',weight:1,fillColor:p[2],fillOpacity:.88}).bindTooltip('人流：示範資料').addTo(crowdLayer));
 
-const playerStart=[target[0]-0.00018,target[1]-0.00004];
+const playerStart=[target[0]-0.00055,target[1]-0.00004];
 const playerIcon=L.divIcon({className:'',html:'<div class="player-icon">▲</div>',iconSize:[30,30],iconAnchor:[15,15]});
 const player=L.marker(playerStart,{icon:playerIcon,zIndexOffset:1000}).addTo(map).bindTooltip('玩家位置',{direction:'top',offset:[0,-12]});
-const exploreCircle=L.circle(target,{radius:120,color:'#43f59b',weight:2,opacity:.8,fillColor:'#43f59b',fillOpacity:.06,dashArray:'6 7'}).addTo(map);
+const exploreCircle=L.circle(target,{radius:120,color:'#43f59b',weight:2,opacity:.8,fillColor:'#43f59b',fillOpacity:.06,dashArray:'6 7'}).addTo(map);\nlet missionComplete=false;
 map.setView(playerStart,17);
 let moveDirection=null;
 let moveTimer=null;
@@ -117,6 +117,21 @@ function movePlayer(){
   const distance=map.distance(target,next);
   document.getElementById('exploreStatus').textContent='探索範圍：距 LSK001 '+Math.round(distance)+' 米';
   document.getElementById('exploreStatus').style.color=distance<=120?'#43f59b':'#ffd36a';
+  const missionTitle=document.getElementById('missionTitle');
+  const missionText=document.getElementById('missionText');
+  const objectiveText=document.getElementById('objectiveText');
+  if(distance<=18&&!missionComplete){
+    missionComplete=true;
+    missionTitle.textContent='任務完成！LSK001 已抵達';
+    missionText.textContent='你已到達目標路口，可以繼續自由探索。';
+    objectiveText.textContent='✓ MISSION COMPLETE';
+    objectiveText.style.borderColor='#43f59b';
+    objectiveText.style.color='#43f59b';
+  }else if(!missionComplete){
+    missionTitle.textContent='LSK001 路口探索';
+    missionText.textContent='距離目標約 '+Math.round(distance)+' 米，繼續前進。';
+    objectiveText.textContent='◆ OBJECTIVE　前往 LSK001 · '+Math.round(distance)+' m';
+  }
 }
 function stopMoving(){
   moveDirection=null;
