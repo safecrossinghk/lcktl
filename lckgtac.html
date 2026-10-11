@@ -96,7 +96,8 @@ demo.forEach(p=>L.circleMarker([p[0],p[1]],{radius:9,color:'#fff',weight:1,fillC
 const playerStart=[target[0]-0.00055,target[1]-0.00004];
 const playerIcon=L.divIcon({className:'',html:'<div class="player-icon">▲</div>',iconSize:[30,30],iconAnchor:[15,15]});
 const player=L.marker(playerStart,{icon:playerIcon,zIndexOffset:1000}).addTo(map).bindTooltip('玩家位置',{direction:'top',offset:[0,-12]});
-const exploreCircle=L.circle(target,{radius:120,color:'#43f59b',weight:2,opacity:.8,fillColor:'#43f59b',fillOpacity:.06,dashArray:'6 7'}).addTo(map);\nlet missionComplete=false;
+const exploreCircle=L.circle(target,{radius:120,color:'#43f59b',weight:2,opacity:.8,fillColor:'#43f59b',fillOpacity:.06,dashArray:'6 7'}).addTo(map);
+let missionComplete=false;
 map.setView(playerStart,17);
 let moveDirection=null;
 let moveTimer=null;
