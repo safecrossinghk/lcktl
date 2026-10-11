@@ -55,7 +55,7 @@
 
 <div class="game-hud" aria-hidden="false">
   <div class="mission"><div class="eyebrow">SIDE MISSION · LCK</div><strong id="missionTitle">LSK001 路口探索</strong><p id="missionText">前往標記位置，完成街區探索任務</p><div class="mission-destination" id="destinationHud">目的地：LSK001 路口 · 距離計算中</div></div>
-  <div class="game-stats"><div class="stat-pill">區域　荔枝角</div><div class="stat-pill wanted">★ ★ ★ ☆ ☆</div><div class="stat-pill">MODE: FREE ROAM</div></div>
+  <div class="game-stats"><div class="stat-pill">區域　荔枝角</div><div class="stat-pill" id="landmarkProgress">探索地標 0/6</div><div class="stat-pill wanted">★ ★ ★ ☆ ☆</div><div class="stat-pill">MODE: FREE ROAM</div></div>
   <div class="objective" id="objectiveText">◆ OBJECTIVE　前往 LSK001</div>
   <div class="bottom-hud"><div class="mini-badge"><b>街區雷達</b><div class="radar"></div><span>示意 HUD · 非導航</span></div><button class="game-action" id="hudCenter" aria-label="定位 LSK001">◎</button></div>
 </div>
@@ -124,12 +124,15 @@ landmarks.forEach((spot,index)=>{
 
 let missionComplete=false;
 let selectedDestination=landmarks[0];
+const visitedLandmarks=new Set();
 map.setView(playerStart,17);
 let moveDirection=null;
 let moveTimer=null;
 function updateExploreStatus(){
  const p=player.getLatLng();
  const distance=map.distance(target,p);
+ landmarks.forEach(spot=>{if(map.distance(p,spot.pos)<=12)visitedLandmarks.add(spot.name);});
+ document.getElementById('landmarkProgress').textContent='探索地標 '+visitedLandmarks.size+'/'+landmarks.length;
  const destinationDistance=map.distance(selectedDestination.pos,p);
  const destinationHud=document.getElementById('destinationHud');
  const arrived=destinationDistance<=12;
