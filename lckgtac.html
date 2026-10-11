@@ -110,6 +110,8 @@ const landmarks=[
  {name:'長順街附近（參考位置）',pos:[22.337,114.1485],desc:'依公開地圖資料的概略位置；仍需以底圖道路核對'}
 ];
 const landmarkLayer=L.layerGroup().addTo(map);
+const visitedLandmarks=new Set();
+const landmarkMarkers=new Map();
 landmarkLayer.addTo(map);
 map.createPane('landmarkPane');
 map.getPane('landmarkPane').style.zIndex=720;
@@ -118,20 +120,30 @@ landmarks.forEach((spot,index)=>{
  const html='<div style="display:inline-block;background:#101d2d;border:2px solid #ffd34d;color:#fff;border-radius:8px;padding:7px 9px;font-size:12px;font-weight:900;white-space:nowrap;box-shadow:0 3px 14px #000c;line-height:1.2"><span style="color:#ffd34d;margin-right:5px">◆</span>'+spot.name+'</div>';
  const pin=L.divIcon({className:'',html,iconSize:[150,34],iconAnchor:[75,17]});
  const marker=L.marker(spot.pos,{icon:pin,pane:'landmarkPane',zIndexOffset:2000+index,keyboard:true}).addTo(map);
+ landmarkMarkers.set(spot.name,{marker,spot,index});
  marker.bindPopup('<b>'+spot.name+'</b><br>'+spot.desc+'<br><small>自由探索 · 位置請以真實底圖核對</small>');
  marker.on('click',()=>{selectedDestination=spot;player.setLatLng(spot.pos);map.flyTo(spot.pos,18,{duration:.45});updateExploreStatus();document.getElementById('missionTitle').textContent='自由探索：'+spot.name;document.getElementById('missionText').textContent='已選擇目的地。可繼續使用方向鍵探索附近街道。';document.getElementById('objectiveText').textContent='✓ 目的地已選擇 · '+spot.name;});
 });
 
 let missionComplete=false;
 let selectedDestination=landmarks[0];
-const visitedLandmarks=new Set();
 map.setView(playerStart,17);
 let moveDirection=null;
 let moveTimer=null;
 function updateExploreStatus(){
  const p=player.getLatLng();
  const distance=map.distance(target,p);
- landmarks.forEach(spot=>{if(map.distance(p,spot.pos)<=12)visitedLandmarks.add(spot.name);});
+ landmarks.forEach(spot=>{
+  if(map.distance(p,spot.pos)<=12&&!visitedLandmarks.has(spot.name)){
+   visitedLandmarks.add(spot.name);
+   const item=landmarkMarkers.get(spot.name);
+   if(item){
+    const visitedHtml='<div style="display:inline-block;background:#0d2b25;border:2px solid #43f59b;color:#fff;border-radius:8px;padding:7px 9px;font-size:12px;font-weight:900;white-space:nowrap;box-shadow:0 3px 14px #000c;line-height:1.2"><span style="color:#43f59b;margin-right:5px">✓</span>'+spot.name+'</div>';
+    item.marker.setIcon(L.divIcon({className:'',html:visitedHtml,iconSize:[150,34],iconAnchor:[75,17]}));
+    item.marker.setPopupContent('<b>✓ 已探索：'+spot.name+'</b><br>'+spot.desc+'<br><small>已記錄到訪 · 自由探索</small>');
+   }
+  }
+ });
  document.getElementById('landmarkProgress').textContent='探索地標 '+visitedLandmarks.size+'/'+landmarks.length;
  const destinationDistance=map.distance(selectedDestination.pos,p);
  const destinationHud=document.getElementById('destinationHud');
