@@ -38,6 +38,7 @@
 .player-icon{width:30px;height:30px;border:3px solid #fff;border-radius:50%;background:#37d9ff;box-shadow:0 0 0 5px #37d9ff45,0 0 18px #37d9ff;display:flex;align-items:center;justify-content:center;color:#07111e;font-size:17px;font-weight:1000}
 .player-icon:after{content:"";position:absolute;top:-9px;left:8px;border-left:5px solid transparent;border-right:5px solid transparent;border-bottom:9px solid #fff}
 .explore-label{background:#07111eea;color:#43f59b;border:1px solid #43f59b;border-radius:5px;padding:4px 7px;font-size:10px;font-weight:800;white-space:nowrap}
+.landmark-pin{background:#101d2def;border:1px solid #ffd34d;color:#fff;border-radius:8px;padding:6px 8px;font-size:10px;font-weight:800;white-space:nowrap;box-shadow:0 3px 12px #0008}.landmark-pin span{color:#ffd34d;margin-right:4px}.landmark-note{font-size:9px;color:#ffd36a;margin-top:6px;line-height:1.4}
 .move-pad{position:absolute;z-index:1100;right:14px;bottom:calc(20px + env(safe-area-inset-bottom,0px));width:142px;height:142px;pointer-events:none;filter:drop-shadow(0 5px 12px #0008)}
 .move-pad button{position:absolute;pointer-events:auto;touch-action:none;user-select:none;-webkit-user-select:none;width:46px;height:46px;border:1px solid #ffffffa8;border-radius:12px;background:linear-gradient(145deg,#1b4058f5,#071522f5);color:#fff;font-size:21px;font-weight:900;display:flex;align-items:center;justify-content:center}
 .move-pad button:active,.move-pad button.moving{background:linear-gradient(145deg,#38d9ff,#087eaa);color:#06131d}
@@ -63,6 +64,9 @@
 <h2>📍 LSK001 路口控制台</h2>
 <div class="line"><span>測試位置</span><b>荔枝角道東行 × 長荔街</b></div>
 <div class="line"><span>地圖中心</span><b>LSK001</b></div>
+<div class="line"><span>探索模式</span><b>自由探索</b></div>
+<div class="line"><span>可探索地標</span><b>全部開放</b></div>
+<div class="landmark-note">點擊地標可快速前往；位置為街區探索示意點，請以底圖道路為準。</div>
 <div class="line"><span>人流圖層</span><b style="color:#ffd36a">示範資料</b></div>
 <div class="line"><span>交通燈倒數</span><b>尚未接入</b></div>
 <div class="note">⚠️ 人流圓點只作介面示範，並非即時人流、Google 數據或實際人數。地圖位置以底圖為準。</div>
@@ -96,11 +100,31 @@ demo.forEach(p=>L.circleMarker([p[0],p[1]],{radius:9,color:'#fff',weight:1,fillC
 const playerStart=[target[0]-0.00055,target[1]-0.00004];
 const playerIcon=L.divIcon({className:'',html:'<div class="player-icon">▲</div>',iconSize:[30,30],iconAnchor:[15,15]});
 const player=L.marker(playerStart,{icon:playerIcon,zIndexOffset:1000}).addTo(map).bindTooltip('玩家位置',{direction:'top',offset:[0,-12]});
-const exploreCircle=L.circle(target,{radius:120,color:'#43f59b',weight:2,opacity:.8,fillColor:'#43f59b',fillOpacity:.06,dashArray:'6 7'}).addTo(map);
+const exploreCircle=L.circle(target,{radius:260,color:'#43f59b',weight:2,opacity:.8,fillColor:'#43f59b',fillOpacity:.04,dashArray:'6 7'}).addTo(map);
+const landmarks=[
+ {name:'LSK001 路口',pos:target,desc:'荔枝角道東行 × 長荔街'},
+ {name:'長荔街一帶',pos:[22.33535,114.14872],desc:'長荔街附近示意點'},
+ {name:'荔枝角道一帶',pos:[22.33605,114.14945],desc:'荔枝角道附近示意點'},
+ {name:'長沙灣道一帶',pos:[22.33635,114.15020],desc:'長沙灣道附近示意點'},
+ {name:'永康街一帶',pos:[22.33495,114.14810],desc:'永康街附近示意點'},
+ {name:'長順街一帶',pos:[22.33495,114.15005],desc:'長順街附近示意點'}
+];
+const landmarkLayer=L.layerGroup().addTo(map);
+landmarks.forEach(spot=>{
+ const pin=L.divIcon({className:'',html:'<div class="landmark-pin"><span>◆</span>'+spot.name+'</div>',iconSize:[120,30],iconAnchor:[60,15]});
+ L.marker(spot.pos,{icon:pin}).addTo(landmarkLayer).bindPopup('<b>'+spot.name+'</b><br>'+spot.desc+'<br><small>自由探索 · 示意點</small>')
+ .on('click',()=>{player.setLatLng(spot.pos);map.flyTo(spot.pos,18,{duration:.45});updateExploreStatus();});
+});
 let missionComplete=false;
 map.setView(playerStart,17);
 let moveDirection=null;
 let moveTimer=null;
+function updateExploreStatus(){
+ const p=player.getLatLng();
+ const distance=map.distance(target,p);
+ document.getElementById('exploreStatus').textContent='自由探索：距 LSK001 '+Math.round(distance)+' 米 · 地標 '+landmarks.length+' 個';
+ document.getElementById('exploreStatus').style.color=distance<=260?'#43f59b':'#ffd36a';
+}
 function movePlayer(){
   if(!moveDirection)return;
   const p=player.getLatLng();
@@ -116,8 +140,8 @@ function movePlayer(){
   player.setLatLng(next);
   map.panTo(next,{animate:false});
   const distance=map.distance(target,next);
-  document.getElementById('exploreStatus').textContent='探索範圍：距 LSK001 '+Math.round(distance)+' 米';
-  document.getElementById('exploreStatus').style.color=distance<=120?'#43f59b':'#ffd36a';
+  updateExploreStatus();
+ 
   const missionTitle=document.getElementById('missionTitle');
   const missionText=document.getElementById('missionText');
   const objectiveText=document.getElementById('objectiveText');
@@ -156,8 +180,8 @@ window.addEventListener('pointerup',stopMoving);
 
 const panel=document.getElementById('panel'),menu=document.getElementById('menuBtn');
 menu.addEventListener('click',()=>{panel.classList.toggle('hidden');menu.textContent=panel.classList.contains('hidden')?'☰':'×'});
-document.getElementById('centerBtn').addEventListener('click',()=>map.flyTo(target,17,{duration:.6}));
-document.getElementById('hudCenter').addEventListener('click',()=>map.flyTo(target,17,{duration:.6}));
+document.getElementById('centerBtn').addEventListener('click',()=>{player.setLatLng(playerStart);map.flyTo(playerStart,17,{duration:.6});updateExploreStatus();});
+document.getElementById('hudCenter').addEventListener('click',()=>{player.setLatLng(target);map.flyTo(target,17,{duration:.6});updateExploreStatus();});
 let shown=true;document.getElementById('crowdBtn').addEventListener('click',()=>{shown=!shown;if(shown)crowdLayer.addTo(map);else map.removeLayer(crowdLayer)});
 })();
 </script>
