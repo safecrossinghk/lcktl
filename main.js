@@ -95,7 +95,7 @@ function distanceMeters(point1, point2) {
 
 
 // ===================================================
-// 3. 顯示 GPS 位置 + 100 米範圍判斷
+// 3. 顯示 GPS 位置 + 100 米範圍判斷（含自動同步倒數）
 // ===================================================
 
 function handlePosition(position) {
@@ -119,6 +119,12 @@ function handlePosition(position) {
   if (distance <= radius) {
     elements.status.textContent = `已進入 LSK001 ${radius} 米範圍`;
     elements.signalButton.disabled = false;
+
+    // 一旦進入 100 米範圍，若倒數面板尚未顯示，自動向 Worker 查詢並嘗試同步其他裝置的倒數
+    if (countdownElements.panel && countdownElements.panel.hidden) {
+      console.log('已進入 100 米範圍，自動同步伺服器倒數狀態…');
+      loadCountdown();
+    }
   } else {
     elements.status.textContent = `尚未進入 LSK001 ${radius} 米範圍`;
     elements.signalButton.disabled = true;
@@ -591,7 +597,7 @@ if (countdownElements.stopButton) {
 
 
 // ===================================================
-// 15. PWA 前景／背景自動重新校正 (還原舊版穩定邏輯)
+// 15. PWA 前景／背景自動重新校正 (舊版穩定邏輯)
 // ===================================================
 
 let countdownWasRunningBeforeHidden = false;
@@ -625,14 +631,13 @@ document.addEventListener('visibilitychange', async () => {
 
 
 // ===================================================
-// 16. 初始化 (移除自動載入倒數，維持進入 100m 按按鈕才出現)
+// 16. 初始化
 // ===================================================
 
 async function init() {
   try {
     await loadRoads();
     startGPS();
-    // 保持初始隱藏倒數面板，必須進入 100m 範圍並按下轉燈掣或校正後才會顯示
     hideCountdownPanel();
   } catch (error) {
     console.error('LSK001 初始化失敗：', error);
