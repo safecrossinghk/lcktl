@@ -331,7 +331,7 @@ function startLocalCountdown() {
 
 
 // ===================================================
-// 11. 呼叫 Worker /api/signal-countdown (含防快取與保底機制)
+// 11. 呼叫 Worker /api/signal-countdown (含 2 小時過期攔截與防快取)
 // ===================================================
 
 async function loadCountdown() {
@@ -353,6 +353,18 @@ async function loadCountdown() {
     const data = await response.json();
 
     console.log('LSK001 countdown API：', data);
+
+    // 嚴格過期檢查：若最新 GREEN 已超過 2 小時 (7200秒)，強制拒絕啟動倒數
+    const greenAgeSec = Number(data.latest_green_age_sec);
+    if (Number.isFinite(greenAgeSec) && greenAgeSec >= 7200) {
+      console.log('最新 GREEN 已超過 2 小時，拒絕啟動倒數。');
+      stopCountdownTimer();
+      showCountdownPanel();
+      if (countdownElements.state) countdownElements.state.textContent = '等待新的轉燈資料';
+      if (countdownElements.seconds) countdownElements.seconds.textContent = '--';
+      if (countdownElements.info) countdownElements.info.textContent = '最新 GREEN 已超過 2 小時，請重新記錄轉燈。';
+      return;
+    }
 
     if (
       !response.ok ||
