@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#101820">
+  <title>安全過路 HK｜LSK001 互動地圖測試</title>
+  <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@6.13.0/dist/maplibre-gl.css">
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand-mark">HK</div>
+    <div class="brand-copy">
+      <strong>安全過路 HK</strong>
+      <span>LSK001 互動地圖 · 獨立測試版</span>
+    </div>
+    <span class="demo-badge">模擬資料</span>
+  </header>
+
+  <main>
+    <section class="map-shell" aria-label="LSK001 互動地圖">
+      <div id="map" role="application" aria-label="可縮放及拖曳的地圖"></div>
+      <div class="map-search-pill"><span class="search-dot"></span> 荔枝角 · LSK001</div>
+      <button id="locateButton" class="map-action locate" type="button" aria-label="嘗試定位我的位置">◎</button>
+      <div class="map-hint">拖曳移動 · 雙指或按鈕縮放</div>
+    </section>
+
+    <section class="signal-panel">
+      <div class="panel-heading">
+        <div>
+          <div class="eyebrow">選取路口</div>
+          <h1>荔枝角道 × 長荔街</h1>
+        </div>
+        <span class="status-pill"><span class="pulse"></span> 本機模擬中</span>
+      </div>
+
+      <div class="countdown-row">
+        <div id="signalIcon" class="signal-icon red" aria-hidden="true">
+          <span id="signalLabel">紅燈</span>
+          <strong id="countdownNumber">32</strong>
+          <small>秒</small>
+        </div>
+        <div class="countdown-copy">
+          <div class="countdown-title">預計下一次轉燈</div>
+          <div id="nextSignal" class="next-signal">約 32 秒後轉綠</div>
+          <div class="disclaimer">示範倒數，並非即時交通燈資料</div>
+        </div>
+      </div>
+
+      <div class="action-grid">
+        <button id="simulateGreen" class="action-button green-button" type="button">模擬轉綠</button>
+        <button id="simulateRed" class="action-button red-button" type="button">模擬轉紅</button>
+        <button id="resetButton" class="action-button secondary-button" type="button">重新開始模擬</button>
+      </div>
+
+      <div class="data-grid">
+        <div class="data-item"><span>路口編號</span><strong>LSK001</strong></div>
+        <div class="data-item"><span>周期設定</span><strong>124 秒（示範）</strong></div>
+        <div class="data-item"><span>數據來源</span><strong>本機模擬</strong></div>
+        <div class="data-item"><span>Worker 連線</span><strong class="not-connected">尚未連接</strong></div>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <span>地圖資料 © OpenStreetMap contributors · 底圖由 CARTO 提供</span>
+    <span>測試版 0.1.0</span>
+  </footer>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <script type="module" src="./app.js"></script>
+</body>
+</html>
