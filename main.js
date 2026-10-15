@@ -26,6 +26,7 @@ const countdownElements = {
 };
 
 let countdownTimer = null;
+let countdownSyncInterval = null; // 用於背景自動同步的計時器
 let countdownEndAtMs = null;
 let countdownState = null;
 let countdownModel = null;
@@ -94,7 +95,7 @@ function distanceMeters(point1, point2) {
 
 
 // ===================================================
-// 3. 顯示 GPS 位置 + 100 米範圍判斷（不自動彈出倒數）
+// 3. 顯示 GPS 位置 + 100 米範圍判斷（不自動彈出，維持手動觸發）
 // ===================================================
 
 function handlePosition(position) {
@@ -198,6 +199,10 @@ function stopCountdownTimer() {
     clearInterval(countdownTimer);
     countdownTimer = null;
   }
+  if (countdownSyncInterval !== null) {
+    clearInterval(countdownSyncInterval);
+    countdownSyncInterval = null;
+  }
   countdownEndAtMs = null;
 }
 
@@ -246,7 +251,7 @@ function updateCountdownDisplay(remainingSec) {
   const modelText =
     countdownModel?.source === 'TIME_DISTANCE_WEIGHTED'
       ? '最接近當刻＋時間距離加權'
-      : '標準模型';
+      : '標準模型固定';
 
   let infoText = '實驗倒數｜資料模型：' + modelText;
 
@@ -259,7 +264,7 @@ function updateCountdownDisplay(remainingSec) {
 
 
 // ===================================================
-// 10. 開始本地倒數 (含 2 小時保護 及 歸零自動重新向 Worker 同步)
+// 10. 開始本地倒數 (含背景自動輪詢同步，確保另一台裝置按掣時這台自動彈出顯示)
 // ===================================================
 
 function startLocalCountdown() {
@@ -276,6 +281,7 @@ function startLocalCountdown() {
     return;
   }
 
+  // 啟動 250ms 本地跑秒
   countdownTimer = setInterval(() => {
     const nowMs = Date.now();
 
@@ -298,9 +304,7 @@ function startLocalCountdown() {
 
     let remainingSec = (countdownEndAtMs - nowMs) / 1000;
 
-    // ---------------------------------------------------
-    // 本地倒數完成：自動向 Worker 重新同步，實現跨裝置自動對齊
-    // ---------------------------------------------------
+    // 本地倒數完成：自動向 Worker 重新同步
     if (remainingSec <= 0) {
       console.log('LSK001 本地倒數完成，自動向 Worker 重新同步…');
       stopCountdownTimer();
@@ -310,11 +314,30 @@ function startLocalCountdown() {
 
     updateCountdownDisplay(remainingSec);
   }, 250);
+
+  // 💡 關鍵新增：啟動背景自動輪詢（每 6 秒靜默向 Worker 檢查一次）
+  // 這樣當另一台裝置（如 iOS）按了轉燈，這台裝置（如 Android）不用自己按也能自動同步並顯示面板
+  if (countdownSyncInterval === null) {
+    countdownSyncInterval = setInterval(async () => {
+      // 確保只在背景默默同步，不干擾當前畫面
+      try {
+        const response = await fetch(`${WORKER_API}/api/signal-countdown?road_id=LSK001`);
+        const data = await response.json();
+        if (data.ok && data.available && data.countdown_available) {
+          // 檢查伺服器端的狀態或剩餘時間是否有顯著變動，若有則靜默校正
+          // 這裡直接呼叫 loadCountdown() 讓它安全對齊
+          await loadCountdown();
+        }
+      } catch (e) {
+        // 背景同步失敗不予理會，維持本地倒數
+      }
+    }, 6000);
+  }
 }
 
 
 // ===================================================
-// 11. 呼叫 Worker /api/signal-countdown (強制跟隨模型標準秒數，不被單次實測覆蓋)
+// 11. 呼叫 Worker /api/signal-countdown (強制鎖定標準模型秒數 + 網絡失敗保護)
 // ===================================================
 
 async function loadCountdown() {
@@ -337,9 +360,8 @@ async function loadCountdown() {
       !data.countdown_available ||
       !data.available
     ) {
-      stopCountdownTimer();
-      hideCountdownPanel();
-      return;
+      console.warn('Worker 資料暫時無法使用，維持本地倒數。');
+      return; 
     }
 
     if (
@@ -349,19 +371,17 @@ async function loadCountdown() {
       !Number.isFinite(Number(data.model.cycle_average_sec)) ||
       !Number.isFinite(Number(data.estimated_remaining_sec))
     ) {
-      console.error('Countdown API 資料不足：', data);
-      stopCountdownTimer();
-      hideCountdownPanel();
-      return;
+      console.error('Countdown API 資料不足，維持本地倒數。', data);
+      return; 
     }
 
-    // 強制使用 nearest_cycle 或 標準模型的秒數，忽略單次手動按掣造成的實測漂移
+    // 強制採用標準模型的 nearest_cycle 或平均值作為固定基準，不受單次實測影響
     const baseGreen = data.nearest_cycle ? Number(data.nearest_cycle.green_sec) : Number(data.model.green_average_sec);
     const baseRed = data.nearest_cycle ? Number(data.nearest_cycle.red_sec) : Number(data.model.red_average_sec);
     const cycleSec = baseGreen + baseRed;
 
     countdownModel = {
-      source: data.model_source || 'FORCED_MODEL_SECONDS',
+      source: 'FORCED_STANDARD_MODEL',
       green_average_sec: baseGreen,
       red_average_sec: baseRed,
       cycle_average_sec: cycleSec,
@@ -372,7 +392,6 @@ async function loadCountdown() {
     countdownLatestGreenAgeSec = Number(data.latest_green_age_sec);
     countdownStartedAtMs = Date.now();
 
-    // 重新計算基於標準模型秒數的剩餘時間
     const phaseElapsedSec = Number(data.elapsed_since_green_sec) % cycleSec;
     
     let currentEstimatedRemaining;
@@ -386,19 +405,15 @@ async function loadCountdown() {
 
     countdownEndAtMs = Date.now() + Math.max(0, currentEstimatedRemaining) * 1000;
 
-    showCountdownPanel();
+    showCountdownPanel(); // 自動彈出白底倒數面板（當另一台裝置按掣後，這台透過輪詢也會自動執行到這裡並彈出）
     updateCountdownDisplay(Math.max(0, currentEstimatedRemaining));
     startLocalCountdown();
 
-    console.log('LSK001 實驗倒數已開始/強制對齊模型完成：', {
-      state: countdownState,
-      remaining: currentEstimatedRemaining
-    });
-
   } catch (error) {
-    console.error('取得 LSK001 countdown 失敗：', error);
-    stopCountdownTimer();
-    hideCountdownPanel();
+    console.error('取得 LSK001 countdown 失敗（可能網絡不穩或已離開範圍）：', error);
+    if (!Number.isFinite(countdownEndAtMs)) {
+      hideCountdownPanel();
+    }
   }
 }
 
@@ -558,7 +573,7 @@ document.addEventListener('visibilitychange', async () => {
 
 
 // ===================================================
-// 16. 初始化（維持進入 100m 不自動彈出，手動按掣才叫出）
+// 16. 初始化（維持進入 100m 不自動彈出，等待手動按掣或另一台裝置觸發同步）
 // ===================================================
 
 async function init() {
