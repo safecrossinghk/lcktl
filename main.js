@@ -26,7 +26,7 @@ const countdownElements = {
 };
 
 let countdownTimer = null;
-let countdownSyncInterval = null; // 用於背景自動同步的計時器
+let globalPollTimer = null; // 全局常駐背景輪詢
 let countdownEndAtMs = null;
 let countdownState = null;
 let countdownModel = null;
@@ -95,7 +95,7 @@ function distanceMeters(point1, point2) {
 
 
 // ===================================================
-// 3. 顯示 GPS 位置 + 100 米範圍判斷（不自動彈出，維持手動觸發）
+// 3. 顯示 GPS 位置 + 100 米範圍判斷
 // ===================================================
 
 function handlePosition(position) {
@@ -199,10 +199,6 @@ function stopCountdownTimer() {
     clearInterval(countdownTimer);
     countdownTimer = null;
   }
-  if (countdownSyncInterval !== null) {
-    clearInterval(countdownSyncInterval);
-    countdownSyncInterval = null;
-  }
   countdownEndAtMs = null;
 }
 
@@ -264,7 +260,7 @@ function updateCountdownDisplay(remainingSec) {
 
 
 // ===================================================
-// 10. 開始本地倒數 (含背景自動輪詢同步，確保另一台裝置按掣時這台自動彈出顯示)
+// 10. 開始本地倒數 (250ms 跑秒 + 歸零自動同步)
 // ===================================================
 
 function startLocalCountdown() {
@@ -281,7 +277,6 @@ function startLocalCountdown() {
     return;
   }
 
-  // 啟動 250ms 本地跑秒
   countdownTimer = setInterval(() => {
     const nowMs = Date.now();
 
@@ -314,30 +309,11 @@ function startLocalCountdown() {
 
     updateCountdownDisplay(remainingSec);
   }, 250);
-
-  // 💡 關鍵新增：啟動背景自動輪詢（每 6 秒靜默向 Worker 檢查一次）
-  // 這樣當另一台裝置（如 iOS）按了轉燈，這台裝置（如 Android）不用自己按也能自動同步並顯示面板
-  if (countdownSyncInterval === null) {
-    countdownSyncInterval = setInterval(async () => {
-      // 確保只在背景默默同步，不干擾當前畫面
-      try {
-        const response = await fetch(`${WORKER_API}/api/signal-countdown?road_id=LSK001`);
-        const data = await response.json();
-        if (data.ok && data.available && data.countdown_available) {
-          // 檢查伺服器端的狀態或剩餘時間是否有顯著變動，若有則靜默校正
-          // 這裡直接呼叫 loadCountdown() 讓它安全對齊
-          await loadCountdown();
-        }
-      } catch (e) {
-        // 背景同步失敗不予理會，維持本地倒數
-      }
-    }, 6000);
-  }
 }
 
 
 // ===================================================
-// 11. 呼叫 Worker /api/signal-countdown (強制鎖定標準模型秒數 + 網絡失敗保護)
+// 11. 呼叫 Worker /api/signal-countdown (加入延遲補償，徹底消除滯後)
 // ===================================================
 
 async function loadCountdown() {
@@ -347,12 +323,11 @@ async function loadCountdown() {
   }
 
   try {
-    console.log('正在取得 LSK001 signal countdown…');
-
-    const response = await fetch(`${WORKER_API}/api/signal-countdown?road_id=LSK001`);
+    const fetchStartTime = Date.now();
+    const response = await fetch(`${WORKER_API}/api/signal-countdown?road_id=LSK001`, {
+      cache: 'no-store' // 💡 強制不使用快取，確保每次都拿最新的伺服器時間
+    });
     const data = await response.json();
-
-    console.log('LSK001 countdown API：', data);
 
     if (
       !response.ok ||
@@ -371,11 +346,9 @@ async function loadCountdown() {
       !Number.isFinite(Number(data.model.cycle_average_sec)) ||
       !Number.isFinite(Number(data.estimated_remaining_sec))
     ) {
-      console.error('Countdown API 資料不足，維持本地倒數。', data);
       return; 
     }
 
-    // 強制採用標準模型的 nearest_cycle 或平均值作為固定基準，不受單次實測影響
     const baseGreen = data.nearest_cycle ? Number(data.nearest_cycle.green_sec) : Number(data.model.green_average_sec);
     const baseRed = data.nearest_cycle ? Number(data.nearest_cycle.red_sec) : Number(data.model.red_average_sec);
     const cycleSec = baseGreen + baseRed;
@@ -403,14 +376,18 @@ async function loadCountdown() {
       currentEstimatedRemaining = cycleSec - phaseElapsedSec;
     }
 
-    countdownEndAtMs = Date.now() + Math.max(0, currentEstimatedRemaining) * 1000;
+    // 💡 補償網路與 PWA 處理延遲，確保秒數與伺服器絕對同步
+    const networkLatency = (Date.now() - fetchStartTime) / 1000;
+    const adjustedRemaining = Math.max(0, currentEstimatedRemaining - networkLatency);
 
-    showCountdownPanel(); // 自動彈出白底倒數面板（當另一台裝置按掣後，這台透過輪詢也會自動執行到這裡並彈出）
-    updateCountdownDisplay(Math.max(0, currentEstimatedRemaining));
+    countdownEndAtMs = Date.now() + adjustedRemaining * 1000;
+
+    showCountdownPanel(); 
+    updateCountdownDisplay(adjustedRemaining);
     startLocalCountdown();
 
   } catch (error) {
-    console.error('取得 LSK001 countdown 失敗（可能網絡不穩或已離開範圍）：', error);
+    console.error('取得 LSK001 countdown 失敗：', error);
     if (!Number.isFinite(countdownEndAtMs)) {
       hideCountdownPanel();
     }
@@ -515,7 +492,20 @@ signalStateButtons.forEach((button) => {
       signalResult.textContent = `✅ 已記錄 ${state === 'GREEN' ? '🟢 轉綠' : '🔴 轉紅'}（事件 ID：${data.event.id}）`;
 
       signalStateButtons.forEach((item) => { item.disabled = false; });
-      await loadCountdown();
+
+      // 💡 關鍵修復：無論按綠或按紅，立刻強制本地切換狀態與標準秒數，絕不被 API 延遲或舊數據覆蓋
+      if (countdownModel) {
+        countdownState = state; // 'GREEN' 或 'RED'
+        const duration = (state === 'GREEN') ? countdownModel.green_average_sec : countdownModel.red_average_sec;
+        
+        countdownStartedAtMs = Date.now();
+        countdownEndAtMs = Date.now() + duration * 1000;
+
+        showCountdownPanel();
+        updateCountdownDisplay(duration);
+        startLocalCountdown();
+      }
+
     } catch (error) {
       console.error('訊號事件記錄失敗：', error);
       signalResult.textContent = `❌ 記錄失敗：${error.message}`;
@@ -539,41 +529,31 @@ if (countdownElements.stopButton) {
 
 
 // ===================================================
-// 15. PWA 前景／背景自動重新校正
+// 15. PWA 前景／背景強制重新校正（解決 PWA 滯後 20 秒的核心）
 // ===================================================
-
-let countdownWasRunningBeforeHidden = false;
 
 document.addEventListener('visibilitychange', async () => {
   if (document.hidden) {
-    countdownWasRunningBeforeHidden = countdownTimer !== null;
-
     if (countdownTimer !== null) {
       clearInterval(countdownTimer);
       countdownTimer = null;
     }
-
-    console.log('LSK001 PWA 已進入背景，暫停本地倒數 Timer。');
-    return;
-  }
-
-  if (countdownWasRunningBeforeHidden) {
-    countdownWasRunningBeforeHidden = false;
-
-    console.log('LSK001 PWA 返回前景，重新向 Worker 校正倒數…');
-
+    console.log('PWA 進入背景，暫停本地計時器');
+  } else {
+    // 💡 關鍵修復：當 PWA 從背景回到前景時，立刻強制向 Worker 重新抓取最新資料
+    // 這能瞬間清掉 PWA 在背景休眠造成的 20 秒時間落差！
+    console.log('PWA 返回前景，強制向 Worker 校正最新時間…');
     try {
       await loadCountdown();
-      console.log('LSK001 PWA 返回前景後重新校正完成。');
     } catch (error) {
-      console.error('LSK001 返回前景重新校正失敗：', error);
+      console.error('PWA 返回前景校正失敗：', error);
     }
   }
 });
 
 
 // ===================================================
-// 16. 初始化（維持進入 100m 不自動彈出，等待手動按掣或另一台裝置觸發同步）
+// 16. 初始化（常駐背景輪詢 + 強制對齊）
 // ===================================================
 
 async function init() {
@@ -581,6 +561,27 @@ async function init() {
     await loadRoads();
     startGPS();
     hideCountdownPanel();
+
+    // 💡 全局常駐背景輪詢（每 5 秒自動向 Worker 檢查一次，確保 PWA 與獨立網頁完美同步）
+    if (globalPollTimer === null) {
+      globalPollTimer = setInterval(async () => {
+        try {
+          const response = await fetch(`${WORKER_API}/api/signal-countdown?road_id=LSK001`, {
+            cache: 'no-store'
+          });
+          const data = await response.json();
+          if (data.ok && data.available && data.countdown_available) {
+            // 如果面板還沒顯示，或者背景資料有更新，自動調用 loadCountdown 同步
+            if (countdownElements.panel && countdownElements.panel.hidden) {
+              await loadCountdown();
+            }
+          }
+        } catch (e) {
+          // 背景輪詢失敗不處理
+        }
+      }, 5000);
+    }
+
   } catch (error) {
     console.error('LSK001 初始化失敗：', error);
     elements.status.textContent = '無法取得 LSK001 道路資料。';
