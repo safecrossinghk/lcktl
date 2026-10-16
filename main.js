@@ -553,35 +553,15 @@ document.addEventListener('visibilitychange', async () => {
 
 
 // ===================================================
-// 16. 初始化（常駐背景輪詢 + 強制對齊）
+// 16. 初始化 (移除自動載入倒數，維持進入 100m 按按鈕才出現)
 // ===================================================
 
 async function init() {
   try {
     await loadRoads();
     startGPS();
+    // 保持初始隱藏倒數面板，必須進入 100m 範圍並按下轉燈掣或校正後才會顯示
     hideCountdownPanel();
-
-    // 💡 全局常駐背景輪詢（每 5 秒自動向 Worker 檢查一次，確保 PWA 與獨立網頁完美同步）
-    if (globalPollTimer === null) {
-      globalPollTimer = setInterval(async () => {
-        try {
-          const response = await fetch(`${WORKER_API}/api/signal-countdown?road_id=LSK001`, {
-            cache: 'no-store'
-          });
-          const data = await response.json();
-          if (data.ok && data.available && data.countdown_available) {
-            // 如果面板還沒顯示，或者背景資料有更新，自動調用 loadCountdown 同步
-            if (countdownElements.panel && countdownElements.panel.hidden) {
-              await loadCountdown();
-            }
-          }
-        } catch (e) {
-          // 背景輪詢失敗不處理
-        }
-      }, 5000);
-    }
-
   } catch (error) {
     console.error('LSK001 初始化失敗：', error);
     elements.status.textContent = '無法取得 LSK001 道路資料。';
