@@ -267,7 +267,7 @@ countdownElements.info.textContent = infoText;
 
 
 // ===================================================
-// 10. 開始本地倒數 (純本地順暢切換)
+// 10. 開始本地倒數 (週期結束時自動向 Worker 對時同步)
 // ===================================================
 
 function startLocalCountdown() {
@@ -306,22 +306,12 @@ return;
 let remainingSec = (countdownEndAtMs - nowMs) / 1000;
 
 // ---------------------------------------------------
-// 本地倒數完成：切換下一個週期
+// 本地倒數完成（到達 0 秒）：主動向 Worker 請求同步，消除累積誤差！
 // ---------------------------------------------------
 if (remainingSec <= 0) {
-console.log('LSK001 本地倒數完成，切換下一個燈號…');
-
-const nextState = countdownState === 'GREEN' ? 'RED' : 'GREEN';
-const nextDuration =
-nextState === 'GREEN'
-? countdownModel.green_average_sec
-: countdownModel.red_average_sec;
-
-if (Number.isFinite(nextDuration) && nextDuration > 0) {
-countdownState = nextState;
-countdownEndAtMs = Date.now() + nextDuration * 1000;
-updateCountdownDisplay(nextDuration);
-}
+console.log('LSK001 本地倒數完成，向 Worker 請求最新狀態以強制對齊…');
+stopCountdownTimer();
+loadCountdown(); // 雙機在 0 秒交替瞬間自動向 Worker 重新對時，防止落差擴大
 return;
 }
 
