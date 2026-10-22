@@ -454,7 +454,7 @@ async function reviseCountdown() {
 
 
 // ===================================================
-// 13. 記錄 GREEN / RED 訊號事件
+// 13. 記錄 GREEN / RED 訊號事件 (即時本地切換，零延遲反應)
 // ===================================================
 
 const signalChoice = document.querySelector('[data-signal-choice]');
@@ -506,6 +506,19 @@ signalStateButtons.forEach((button) => {
     signalStateButtons.forEach((item) => { item.disabled = true; });
     if (signalResult) signalResult.textContent = `正在記錄 ${state === 'GREEN' ? '🟢 轉綠' : '🔴 轉紅'}…`;
 
+    // 💡 【關鍵優化】不等網絡回應，立刻在本地切換狀態與標準秒數，保證點擊瞬間畫面即時變燈！
+    if (countdownModel) {
+      countdownState = state;
+      const duration = (state === 'GREEN') ? countdownModel.green_average_sec : countdownModel.red_average_sec;
+      
+      countdownStartedAtMs = Date.now();
+      countdownEndAtMs = Date.now() + duration * 1000;
+
+      showCountdownPanel();
+      updateCountdownDisplay(duration);
+      startLocalCountdown();
+    }
+
     try {
       const response = await fetch(`${WORKER_API}/api/signal-events`, {
         method: 'POST',
@@ -531,7 +544,10 @@ signalStateButtons.forEach((button) => {
       }
 
       signalStateButtons.forEach((item) => { item.disabled = false; });
-      await loadCountdown();
+      
+      // 網路成功後，在背景靜默調用一次 loadCountdown，確保跟伺服器的精確時間戳對齊
+      loadCountdown();
+
     } catch (error) {
       console.error('訊號事件記錄失敗：', error);
       if (signalResult) signalResult.textContent = `❌ 記錄失敗：${error.message}`;
