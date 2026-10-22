@@ -1,21 +1,15 @@
-// ===================================================
-// LSK001 實驗倒數 PWA 主程式 (已整合 DOM 載入防護與即時同步優化)
-// ===================================================
+const WORKER_API = 'https://lsk001-api.ctakwah.workers.dev';
 
-document.addEventListener('DOMContentLoaded', () => {
+const elements = {
+  status: document.querySelector('[data-location-status]'),
+  distance: document.querySelector('[data-distance]'),
+  accuracy: document.querySelector('[data-accuracy]'),
+  signalButton: document.querySelector('[data-signal-button]')
+};
 
-  const WORKER_API = 'https://lsk001-api.ctakwah.workers.dev';
-
-  const elements = {
-    status: document.querySelector('[data-location-status]'),
-    distance: document.querySelector('[data-distance]'),
-    accuracy: document.querySelector('[data-accuracy]'),
-    signalButton: document.querySelector('[data-signal-button]')
-  };
-
-  let roads = [];
-  let targetRoad = null;
-  let latestPosition = null;
+let roads = [];
+let targetRoad = null;
+let latestPosition = null;
 
 
 // ===================================================
@@ -100,12 +94,12 @@ function distanceMeters(point1, point2) {
 
 
 // ===================================================
-// 3. 顯示 GPS 位置 + 100 米範圍判斷（含自動同步倒數，加上防呆保護）
+// 3. 顯示 GPS 位置 + 100 米範圍判斷（含自動同步倒數）
 // ===================================================
 
 function handlePosition(position) {
   if (!targetRoad) {
-    if (elements.status) elements.status.textContent = '尚未取得 LSK001 道路資料。';
+    elements.status.textContent = '尚未取得 LSK001 道路資料。';
     return;
   }
 
@@ -122,30 +116,20 @@ function handlePosition(position) {
   const radius = Number(targetRoad.radius) || 100;
 
   if (distance <= radius) {
-    if (elements.status) elements.status.textContent = `已進入 LSK001 ${radius} 米範圍`;
-    if (elements.signalButton) elements.signalButton.disabled = false;
+    elements.status.textContent = `已進入 LSK001 ${radius} 米範圍`;
+    elements.signalButton.disabled = false;
 
     if (countdownElements.panel && countdownElements.panel.hidden) {
       console.log('已進入 100 米範圍，自動同步伺服器倒數狀態…');
       loadCountdown();
     }
   } else {
-    if (elements.status) elements.status.textContent = `尚未進入 LSK001 ${radius} 米範圍`;
-    if (elements.signalButton) elements.signalButton.disabled = true;
+    elements.status.textContent = `尚未進入 LSK001 ${radius} 米範圍`;
+    elements.signalButton.disabled = true;
   }
 
-  // 💡 加上防呆保護，避免 DOM 找不到時程式直接當掉
-  if (elements.distance) {
-    elements.distance.textContent = `${distance.toFixed(1)} 米`;
-  } else {
-    console.warn('找不到 [data-distance] 元素');
-  }
-
-  if (elements.accuracy) {
-    elements.accuracy.textContent = `±${Math.round(accuracy)} 米`;
-  } else {
-    console.warn('找不到 [data-accuracy] 元素');
-  }
+  elements.distance.textContent = `${distance.toFixed(1)} 米`;
+  elements.accuracy.textContent = `±${Math.round(accuracy)} 米`;
 }
 
 
