@@ -1,15 +1,21 @@
-const WORKER_API = 'https://lsk001-api.ctakwah.workers.dev';
+// ===================================================
+// LSK001 實驗倒數 PWA 主程式 (已整合 DOM 載入防護與即時同步優化)
+// ===================================================
 
-const elements = {
-  status: document.querySelector('[data-location-status]'),
-  distance: document.querySelector('[data-distance]'),
-  accuracy: document.querySelector('[data-accuracy]'),
-  signalButton: document.querySelector('[data-signal-button]')
-};
+document.addEventListener('DOMContentLoaded', () => {
 
-let roads = [];
-let targetRoad = null;
-let latestPosition = null;
+  const WORKER_API = 'https://lsk001-api.ctakwah.workers.dev';
+
+  const elements = {
+    status: document.querySelector('[data-location-status]'),
+    distance: document.querySelector('[data-distance]'),
+    accuracy: document.querySelector('[data-accuracy]'),
+    signalButton: document.querySelector('[data-signal-button]')
+  };
+
+  let roads = [];
+  let targetRoad = null;
+  let latestPosition = null;
 
 
 // ===================================================
