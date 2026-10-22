@@ -100,12 +100,12 @@ function distanceMeters(point1, point2) {
 
 
 // ===================================================
-// 3. 顯示 GPS 位置 + 100 米範圍判斷（含自動同步倒數）
+// 3. 顯示 GPS 位置 + 100 米範圍判斷（含自動同步倒數，加上防呆保護）
 // ===================================================
 
 function handlePosition(position) {
   if (!targetRoad) {
-    elements.status.textContent = '尚未取得 LSK001 道路資料。';
+    if (elements.status) elements.status.textContent = '尚未取得 LSK001 道路資料。';
     return;
   }
 
@@ -122,20 +122,30 @@ function handlePosition(position) {
   const radius = Number(targetRoad.radius) || 100;
 
   if (distance <= radius) {
-    elements.status.textContent = `已進入 LSK001 ${radius} 米範圍`;
-    elements.signalButton.disabled = false;
+    if (elements.status) elements.status.textContent = `已進入 LSK001 ${radius} 米範圍`;
+    if (elements.signalButton) elements.signalButton.disabled = false;
 
     if (countdownElements.panel && countdownElements.panel.hidden) {
       console.log('已進入 100 米範圍，自動同步伺服器倒數狀態…');
       loadCountdown();
     }
   } else {
-    elements.status.textContent = `尚未進入 LSK001 ${radius} 米範圍`;
-    elements.signalButton.disabled = true;
+    if (elements.status) elements.status.textContent = `尚未進入 LSK001 ${radius} 米範圍`;
+    if (elements.signalButton) elements.signalButton.disabled = true;
   }
 
-  elements.distance.textContent = `${distance.toFixed(1)} 米`;
-  elements.accuracy.textContent = `±${Math.round(accuracy)} 米`;
+  // 💡 加上防呆保護，避免 DOM 找不到時程式直接當掉
+  if (elements.distance) {
+    elements.distance.textContent = `${distance.toFixed(1)} 米`;
+  } else {
+    console.warn('找不到 [data-distance] 元素');
+  }
+
+  if (elements.accuracy) {
+    elements.accuracy.textContent = `±${Math.round(accuracy)} 米`;
+  } else {
+    console.warn('找不到 [data-accuracy] 元素');
+  }
 }
 
 
